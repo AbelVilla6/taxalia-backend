@@ -19,15 +19,23 @@ import type {
   ArtifactRegistrySnapshot,
 } from '../loaders/registry.js';
 import { inc } from '../observability/metrics.js';
+import { getDefaultLogger, type Logger } from '../observability/logger.js';
 
-const WARNINGS: Record<'en' | 'es', { partial: string; allFailed: string }> = {
+const WARNINGS: Record<
+  'en' | 'es',
+  { partial: string; allFailed: string; noAgents: string }
+> = {
   en: {
     partial: 'Some agents reported partial failures; the answer may be incomplete.',
     allFailed: 'All agents failed.',
+    noAgents:
+      "I couldn't match your question to a Taxalia service. Please mention if you need advisory, valuation, or financial help and I'll route you to the right assistant.",
   },
   es: {
     partial: 'Algunos agentes reportaron fallos parciales; la respuesta podría estar incompleta.',
     allFailed: 'Todos los agentes fallaron.',
+    noAgents:
+      'No pude identificar a qué servicio de Taxalia corresponde tu pregunta. Indicanos si necesitás asesoría, valoración o ayuda financiera y te derivamos al asistente correcto.',
   },
 };
 
@@ -36,6 +44,12 @@ export type ChatRouteDeps = {
   semaphore: Semaphore;
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
+  /**
+   * Optional structured logger. When omitted the route falls back to
+   * the process-wide default logger, which honors LOG_LEVEL and stays
+   * silent under NODE_ENV=test.
+   */
+  logger?: Logger;
   /**
    * Optional override that lets integration tests replace the
    * full pipeline with a simpler stub while still exercising the route.
@@ -54,6 +68,12 @@ export type PipelineRunOptions = {
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
   registry: ArtifactRegistry;
+  /**
+   * Optional request-scoped logger (usually a child of the route
+   * logger pre-bound with `{ requestId }`). When omitted the
+   * pipeline derives one from `getDefaultLogger()`.
+   */
+  logger?: Logger;
 };
 
 export type PipelineResult = {
@@ -91,6 +111,7 @@ type PreflightResult = {
   partial: boolean;
   client: OllamaClient;
   signal: AbortSignal;
+  logger: Logger;
 };
 
 /**
@@ -104,14 +125,18 @@ async function preflightPipeline(
   opts: PipelineRunOptions,
 ): Promise<PreflightResult> {
   const { request, requestId, signal } = opts;
+  const logger =
+    opts.logger ?? getDefaultLogger().child({ requestId, layer: 'pipeline' });
   const lang = request.lang;
   const last = lastUserMessage(request.messages);
   if (!last) {
+    logger.warn({ stage: 'preflight' }, 'empty user message');
     throw new PipelineError('EMPTY_MESSAGE', 400, 'Last user message is empty.');
   }
   const userMessage = last.content;
   const snap = opts.registry.snapshot();
   if (snap.agents.length === 0) {
+    logger.error({ stage: 'preflight' }, 'no agents loaded; cannot route');
     throw new PipelineError(
       'NO_AGENTS_LOADED',
       500,
@@ -119,6 +144,19 @@ async function preflightPipeline(
     );
   }
 
+  logger.info(
+    {
+      stage: 'preflight-start',
+      lang,
+      messageCount: request.messages.length,
+      userMessageChars: userMessage.length,
+      agentsAvailable: snap.agents.length,
+      isCold: opts.coldStart.isCold(),
+    },
+    'chat preflight start',
+  );
+
+  const orchestratorStart = performance.now();
   const decision = await runOrchestrator({
     userMessage,
     agents: snap.agents,
@@ -126,12 +164,26 @@ async function preflightPipeline(
     client: opts.client,
     requestId,
     signal,
+    logger,
   });
+  const orchestratorMs = Math.round(performance.now() - orchestratorStart);
 
   const selectedAgents = snap.agents.filter((a) =>
     decision.agentsToRun.includes(a.id),
   );
 
+  logger.info(
+    {
+      stage: 'orchestrator-done',
+      orchestratorMs,
+      selectedCount: selectedAgents.length,
+      selectedIds: selectedAgents.map((a) => a.id),
+      reasoningChars: (decision.reasoning ?? '').length,
+    },
+    'orchestrator decision',
+  );
+
+  const dispatchStart = performance.now();
   const agentResults = await runDispatch({
     selected: selectedAgents,
     snap,
@@ -143,12 +195,32 @@ async function preflightPipeline(
     semaphore: opts.semaphore,
     agentTimeoutMs: opts.agentTimeoutMs,
     coldStart: opts.coldStart,
+    logger,
   });
+  const dispatchMs = Math.round(performance.now() - dispatchStart);
 
   const failures = agentResults.filter((r) => r.status === 'error');
   const okResults = agentResults.filter((r) => r.status === 'ok');
   const allFailed = okResults.length === 0;
   const partial = failures.length > 0 && !allFailed;
+
+  logger.info(
+    {
+      stage: 'dispatch-done',
+      dispatchMs,
+      okCount: okResults.length,
+      errorCount: failures.length,
+      allFailed,
+      partial,
+      durations: agentResults.map((r) => ({
+        id: r.id,
+        status: r.status,
+        ms: r.durationMs,
+        code: r.error?.code,
+      })),
+    },
+    'agent dispatch result',
+  );
 
   return {
     requestId,
@@ -161,6 +233,7 @@ async function preflightPipeline(
     partial,
     client: opts.client,
     signal,
+    logger,
   };
 }
 
@@ -171,6 +244,7 @@ async function runOrchestrator(args: {
   client: OllamaClient;
   requestId: string;
   signal: AbortSignal;
+  logger: Logger;
 }): Promise<OrchestratorDecision> {
   try {
     return await route({
@@ -180,9 +254,14 @@ async function runOrchestrator(args: {
       client: args.client,
       requestId: args.requestId,
       signal: args.signal,
+      logger: args.logger,
     });
   } catch (err) {
     if (isOllamaUnreachable(err)) {
+      args.logger.error(
+        { stage: 'orchestrator', code: 'OLLAMA_UNREACHABLE' },
+        'Ollama unreachable during orchestrator',
+      );
       throw new PipelineError(
         'OLLAMA_UNREACHABLE',
         503,
@@ -190,12 +269,20 @@ async function runOrchestrator(args: {
       );
     }
     if (isModelMissing(err)) {
+      args.logger.error(
+        { stage: 'orchestrator', code: 'MODEL_MISSING' },
+        'Model missing during orchestrator',
+      );
       throw new PipelineError(
         'MODEL_MISSING',
         503,
         "Model 'gemma4:e4b' is not pulled. Run 'npm run setup' to install it.",
       );
     }
+    args.logger.error(
+      { stage: 'orchestrator', err: errorSummary(err) },
+      'orchestrator threw unexpected error',
+    );
     throw err;
   }
 }
@@ -211,9 +298,20 @@ async function runDispatch(args: {
   semaphore: Semaphore;
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
+  logger: Logger;
 }): Promise<AgentResult[]> {
   const coldBudget = args.coldStart.takeColdBudgetMs();
   const perAgentTimeout = Math.max(args.agentTimeoutMs, coldBudget ?? 0);
+  if (coldBudget !== null) {
+    args.logger.info(
+      {
+        stage: 'cold-start',
+        coldBudgetMs: coldBudget,
+        perAgentTimeoutMs: perAgentTimeout,
+      },
+      'cold-start budget consumed for first dispatch',
+    );
+  }
   try {
     return await runAgents({
       selected: args.selected,
@@ -229,6 +327,10 @@ async function runDispatch(args: {
     });
   } catch (err) {
     if (isOllamaUnreachable(err)) {
+      args.logger.error(
+        { stage: 'dispatch', code: 'OLLAMA_UNREACHABLE' },
+        'Ollama unreachable during agent dispatch',
+      );
       throw new PipelineError(
         'OLLAMA_UNREACHABLE',
         503,
@@ -236,12 +338,20 @@ async function runDispatch(args: {
       );
     }
     if (isModelMissing(err)) {
+      args.logger.error(
+        { stage: 'dispatch', code: 'MODEL_MISSING' },
+        'Model missing during agent dispatch',
+      );
       throw new PipelineError(
         'MODEL_MISSING',
         503,
         "Model 'gemma4:e4b' is not pulled. Run 'npm run setup' to install it.",
       );
     }
+    args.logger.error(
+      { stage: 'dispatch', err: errorSummary(err) },
+      'dispatch threw unexpected error',
+    );
     throw err;
   }
 }
@@ -267,19 +377,47 @@ async function* postStreamEvents(
     partial,
     client,
     signal,
+    logger,
   } = p;
 
-  // Edge: orchestrator picked nothing → emit a single done.agents:[]
+  // Edge: orchestrator picked nothing (and keyword fallback had no
+  // match either) → emit a single delta with a localized warning so
+  // the user always sees something useful. This is the deterministic
+  // safety net: the user must never see a terminal `done` with
+  // `agents: []` and no text.
   if (selectedAgents.length === 0) {
-    yield { done: true, agents: [], requestId };
+    const message = WARNINGS[lang].noAgents;
+    logger.warn(
+      { stage: 'stream', path: 'no-agents-selected', lang, messageChars: message.length },
+      'no agents selected; emitting localized fallback to user',
+    );
+    yield { delta: message };
+    yield {
+      done: true,
+      agents: [],
+      warning: message,
+      requestId,
+    };
     return;
   }
 
   // Single-agent path: forward the agent's text directly (synthesizer
   // is skipped per dispatch R7).
   if (selectedAgents.length < 2) {
+    logger.info(
+      {
+        stage: 'stream',
+        path: 'single-agent',
+        agentId: selectedAgents[0]?.id,
+        hasText: okResults[0]?.text != null && okResults[0].text.length > 0,
+        allFailed,
+      },
+      'single-agent path',
+    );
     if (okResults.length > 0 && okResults[0].text) {
       yield { delta: okResults[0].text };
+    } else if (allFailed) {
+      yield { delta: WARNINGS[lang].allFailed };
     }
     yield {
       done: true,
@@ -291,6 +429,16 @@ async function* postStreamEvents(
   }
 
   // Multi-agent path: run the synthesizer with the successful outputs.
+  logger.info(
+    {
+      stage: 'stream',
+      path: 'multi-agent-synth',
+      okCount: okResults.length,
+      allFailed,
+      partial,
+    },
+    'multi-agent synthesizer path start',
+  );
   const synthStream = streamSynthesizeChunks({
     userMessage,
     agentResults,
@@ -302,6 +450,10 @@ async function* postStreamEvents(
   if (synthStream === null) {
     // Defensive: should not happen here because we have 2+ selected
     // and at least one OK result (we already covered allFailed below).
+    logger.warn(
+      { stage: 'stream', path: 'synth-skipped-defensive' },
+      'synth skipped unexpectedly',
+    );
     yield {
       done: true,
       agents: agentResults,
@@ -313,6 +465,11 @@ async function* postStreamEvents(
 
   if (allFailed) {
     inc('dispatch_total_failures_total');
+    logger.warn(
+      { stage: 'stream', path: 'all-failed' },
+      'all agents failed; emitting done with warning',
+    );
+    yield { delta: WARNINGS[lang].allFailed };
     yield {
       done: true,
       agents: agentResults,
@@ -325,15 +482,31 @@ async function* postStreamEvents(
   // Stream the synth chunks. We accumulate into a string so we can
   // detect the case where the synthesizer emits nothing (e.g., empty
   // model output) and surface the per-agent outputs as a fallback.
+  const synthStart = performance.now();
   let synthText = '';
+  let synthChunks = 0;
   for await (const chunk of synthStream) {
     synthText += chunk;
+    synthChunks += 1;
     yield { delta: chunk };
   }
+  logger.info(
+    {
+      stage: 'stream',
+      synthMs: Math.round(performance.now() - synthStart),
+      synthChars: synthText.length,
+      synthChunks,
+    },
+    'synthesizer stream complete',
+  );
 
   // If the synth stream produced no text, fall back to the per-agent
   // text directly so the client always gets something.
   if (synthText.length === 0 && okResults.length > 0) {
+    logger.warn(
+      { stage: 'stream', path: 'synth-empty-fallback', okCount: okResults.length },
+      'synthesizer produced no text; falling back to agent outputs',
+    );
     for (const r of okResults) {
       if (r.text) {
         yield { delta: r.text };
@@ -356,4 +529,15 @@ function lastUserMessage(messages: Message[]): Message | undefined {
     if (messages[i].role === 'user') return messages[i];
   }
   return undefined;
+}
+
+function errorSummary(err: unknown): { name?: string; message: string; code?: string } {
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: err.message,
+      code: (err as Error & { code?: string }).code,
+    };
+  }
+  return { message: String(err) };
 }

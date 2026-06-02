@@ -4,22 +4,25 @@ import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
 import { buildChatRouter } from './chat/routes.js';
 import { createArtifactRegistry } from './loaders/registry.js';
-import { createLogger } from './observability/logger.js';
+import { createLogger, getDefaultLogger, type Logger } from './observability/logger.js';
 import { requestIdMiddleware } from './observability/requestId.js';
 import { createOllamaClient } from './ollama/client.js';
 import { Semaphore } from './dispatch/semaphore.js';
 import { ColdStartGate } from './chat/coldStart.js';
 
-function createCorsGuard(allowlist: string[]): MiddlewareHandler {
+function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
     const origin = c.req.header('Origin');
     if (origin && !allowlist.includes(origin)) {
-      console.warn(
-        JSON.stringify({
+      logger.warn(
+        {
+          stage: 'cors',
+          action: 'rejected',
           requestId: c.get('requestId'),
           origin,
-          action: 'cors-rejected',
-        }),
+          allowlist,
+        },
+        'CORS origin not in allowlist',
       );
       return c.body(null, 403);
     }
@@ -29,13 +32,14 @@ function createCorsGuard(allowlist: string[]): MiddlewareHandler {
 
 export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   const app = new Hono();
+  const logger = getDefaultLogger();
 
   const allowlist = env.CORS_ALLOWED_ORIGINS.split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 
   app.use('*', requestIdMiddleware);
-  app.use('*', createCorsGuard(allowlist));
+  app.use('*', createCorsGuard(allowlist, logger));
   app.use(
     '*',
     cors({
@@ -60,6 +64,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
       semaphore,
       agentTimeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
       coldStart,
+      logger,
     }),
   );
 

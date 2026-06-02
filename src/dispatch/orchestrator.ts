@@ -7,7 +7,7 @@ import type {
 } from '../ollama/interface.js';
 import { MODEL } from '../ollama/models.js';
 import { inc } from '../observability/metrics.js';
-import { createLogger } from '../observability/logger.js';
+import { getDefaultLogger, type Logger } from '../observability/logger.js';
 import {
   EMPTY_DECISION,
   OrchestratorDecisionSchema,
@@ -16,13 +16,76 @@ import {
 
 const ORCHESTRATOR_TIMEOUT_MS = 10_000;
 
+/**
+ * Keyword fallback map used when the LLM-based orchestrator returns
+ * `agentsToRun: []` (e.g. small models under-infer routing, or the model
+ * plays it safe on ambiguous prompts). Keys are lowercase substrings;
+ * values are the agent ids to add to the decision in declared order.
+ * Listed first wins on ties. This MUST stay in sync with the canonical
+ * agent ids in `backend/src/agents/*.md`.
+ */
+export const KEYWORD_FALLBACK: Readonly<Record<string, readonly string[]>> = {
+  // Spanish
+  'valoraci': ['valuation'],
+  'valoraci\u00f3n': ['valuation'],
+  'tasaci': ['valuation'],
+  'tasar': ['valuation'],
+  'finanz': ['financial'],
+  'financiero': ['financial'],
+  'financiera': ['financial'],
+  'contab': ['financial'],
+  'contable': ['financial'],
+  'asesor': ['advisory'],
+  'asesor\u00eda': ['advisory'],
+  'consultor': ['advisory'],
+  'consultor\u00eda': ['advisory'],
+  'empresa': ['advisory'],
+  'negocio': ['valuation', 'advisory'],
+  'impuest': ['financial'],
+  'fiscal': ['financial'],
+  'tributari': ['financial'],
+  // English
+  'valuati': ['valuation'],
+  'value my': ['valuation'],
+  'company valuation': ['valuation'],
+  'financ': ['financial'],
+  'financial plan': ['financial'],
+  'financial review': ['financial'],
+  'tax': ['financial'],
+  'taxes': ['financial'],
+  'tax planning': ['financial'],
+  'account': ['financial'],
+  'advisor': ['advisory'],
+  'advisory': ['advisory'],
+  'consult': ['advisory'],
+  'engagement': ['advisory'],
+  'quote': ['advisory'],
+  'business': ['advisory', 'financial'],
+};
+
 const ORCHESTRATOR_META_SP: Record<Lang, string> = {
   en: `You are a routing assistant for Taxalia. Given the user's last message and the list of available agents (one line each: "<id>: <description>"), respond ONLY with a JSON object of shape:
 { "agentsToRun": <AgentId[]>, "reasoning": "<one short sentence>" }
-Pick zero or more agents whose scope matches the user's intent. Small talk and greetings return an empty array. Unknown intent returns an empty array. Never invent ids. Respond in English.`,
+
+Routing rules:
+- Pick EVERY agent whose scope matches the user's intent (e.g. a "valuation + financial" prompt selects BOTH "valuation" and "financial").
+- "valuation" handles company valuation, business worth, financial modeling, DCF, multiples, due diligence inputs.
+- "financial" handles taxes, financial planning, accounting, reporting, cash flow.
+- "advisory" handles engagement models, quotes, scheduling, general "what does Taxalia do" questions, and any business / service inquiry.
+- Business, advisory, valuation, financial, accounting, tax, fiscal, company, M&A, due-diligence, or pricing questions MUST select at least one agent.
+- Only return an empty array for pure small talk (greetings, "hi", "thanks", "hola", "gracias", emojis) with no business intent whatsoever.
+- Never invent ids. Respond in English.`,
   es: `Sos el asistente de enrutamiento de Taxalia. Dada el último mensaje del usuario y la lista de agentes disponibles (una línea por agente: "<id>: <description>"), respondé SOLO con un objeto JSON con la forma:
 { "agentsToRun": <AgentId[]>, "reasoning": "<una oración corta>" }
-Elegí cero o más agentes cuyo alcance coincida con la intención del usuario. Charla liviana y saludos devuelven un array vacío. Intención desconocida devuelve un array vacío. Nunca inventes ids. Respondé en español.`,
+
+Reglas de enrutamiento:
+- Elegí TODOS los agentes cuyo alcance coincida con la intención del usuario (p.ej. un mensaje sobre "valoraci\u00f3n y finanzas" selecciona "valuation" Y "financial").
+- "valuation" maneja valoración de empresas, valor del negocio, modelado financiero, DCF, múltiplos, inputs de due diligence.
+- "financial" maneja impuestos, planificación financiera, contabilidad, reporting, flujo de caja.
+- "advisory" maneja modelos de engagement, cotizaciones, agendar reuniones, preguntas generales tipo "qué hace Taxalia", y cualquier consulta sobre servicios / negocios.
+- Preguntas sobre negocios, asesor\u00eda, valoración, finanzas, contabilidad, impuestos, fiscal, empresa, M&A, due diligence o precios DEBEN seleccionar al menos un agente.
+- Solo devolvé un array vacío para charla pura (saludos, "hola", "gracias", emojis) sin ninguna intención de negocio.
+- Nunca inventes ids. Respondé en español.`,
 };
 
 export type RouteArgs = {
@@ -34,11 +97,21 @@ export type RouteArgs = {
   signal?: AbortSignal;
   warn?: (msg: string) => void;
   timeoutMs?: number;
+  /**
+   * Optional structured logger. When omitted the orchestrator falls
+   * back to the process-wide default (silent in tests, info otherwise).
+   * Note: when an explicit `warn` callback is provided it still wins
+   * — that hook predates the structured logger and is used by tests
+   * to capture orchestrator-level warnings.
+   */
+  logger?: Logger;
 };
 
 export async function route(args: RouteArgs): Promise<OrchestratorDecision> {
   inc('dispatch_orchestrator_calls_total');
-  const logger = createLogger('silent').child({ requestId: args.requestId });
+  const logger =
+    args.logger ??
+    getDefaultLogger().child({ requestId: args.requestId, layer: 'orchestrator' });
   const warn = args.warn ?? ((m) => logger.warn(m));
 
   const summaries = args.agents.map((a) => `${a.id}: ${a.description}`).join('\n');
@@ -94,11 +167,56 @@ export async function route(args: RouteArgs): Promise<OrchestratorDecision> {
   }
   decision.agentsToRun = decision.agentsToRun.filter((id) => known.has(id));
 
+  // Deterministic safety net: small models under-infer routing and
+  // frequently return [] for legitimate business prompts (especially
+  // in Spanish). When the LLM picks nothing but the user message
+  // contains a recognized business keyword, fall back to keyword-based
+  // routing. This is logged so operators can tell when the model
+  // under-routes and the fallback is rescuing the request.
+  if (decision.agentsToRun.length === 0) {
+    const fallback = keywordFallback(args.userMessage, args.agents);
+    if (fallback.length > 0) {
+      inc('dispatch_keyword_fallback_total');
+      warn(
+        `orchestrator:keyword-fallback requestId=${args.requestId} selected=[${fallback.join(',')}]`,
+      );
+      decision.agentsToRun = fallback;
+      decision.reasoning = decision.reasoning
+        ? `${decision.reasoning} (keyword fallback)`
+        : 'keyword fallback (orchestrator returned empty)';
+    }
+  }
+
   for (const id of decision.agentsToRun) {
     inc('dispatch_agents_selected_total', { agent_id: id });
   }
 
   return decision;
+}
+
+/**
+ * Pure, testable keyword → agent-id mapping. Scans the user message
+ * (lowercased) for any of the substrings in `KEYWORD_FALLBACK` and
+ * returns the de-duplicated, known agent ids, preserving the first
+ * occurrence order from the keyword table. Unknown ids are dropped.
+ */
+export function keywordFallback(
+  userMessage: string,
+  agents: ReadonlyArray<{ id: string }>,
+): string[] {
+  const known = new Set(agents.map((a) => a.id));
+  const haystack = userMessage.toLowerCase();
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const [needle, ids] of Object.entries(KEYWORD_FALLBACK)) {
+    if (!haystack.includes(needle)) continue;
+    for (const id of ids) {
+      if (!known.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
 }
 
 function safeJsonParse(content: string): unknown {
@@ -150,4 +268,4 @@ function errorMessage(err: unknown): string {
   return String(err);
 }
 
-export const _testing = { ORCHESTRATOR_META_SP, MODEL };
+export const _testing = { ORCHESTRATOR_META_SP, MODEL, KEYWORD_FALLBACK };

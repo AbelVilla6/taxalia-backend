@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentDef } from '../../src/agents/loader.js';
-import { route } from '../../src/dispatch/orchestrator.js';
+import { keywordFallback, route } from '../../src/dispatch/orchestrator.js';
 import { resetMetrics } from '../../src/observability/metrics.js';
 import type {
   OllamaChatRequest,
@@ -39,12 +39,12 @@ const FIXTURES: ReadonlyArray<{ userMessage: string; expected: string[] }> = [
   { userMessage: 'Tell me about your services', expected: [] },
   { userMessage: 'hola, qué hacen?', expected: [] },
   { userMessage: 'Quiero entender valoración y finanzas', expected: ['valuation', 'financial'] },
-  { userMessage: 'How do I plan my taxes?', expected: [] },
+  { userMessage: 'How do I plan my taxes?', expected: ['financial'] },
   { userMessage: 'I have an advisory question and need a valuation', expected: ['advisory', 'valuation'] },
   { userMessage: 'Could you help me with financial planning?', expected: ['financial'] },
   { userMessage: 'Random small talk, hi there', expected: [] },
   { userMessage: 'I want to discuss an investment opportunity', expected: [] },
-  { userMessage: 'Necesito un análisis de valoración', expected: ['valuation'] },
+  { userMessage: 'Necesito un an\u00e1lisis de valoraci\u00f3n', expected: ['valuation'] },
   { userMessage: 'Looking for advisory services and financial guidance', expected: ['advisory', 'financial'] },
   { userMessage: 'I need a quote for advisory and valuation', expected: ['advisory', 'valuation'] },
   { userMessage: 'Tell me about your pricing', expected: [] },
@@ -227,5 +227,183 @@ describe('orchestrator.route (mocked Ollama client)', () => {
       timeoutMs: 25,
     });
     expect(decision.agentsToRun).toEqual([]);
+  });
+});
+
+describe('orchestrator.keywordFallback (pure)', () => {
+  const agents = [
+    { id: 'advisory' },
+    { id: 'valuation' },
+    { id: 'financial' },
+  ];
+
+  it('returns [] for pure small talk in English', () => {
+    expect(keywordFallback('hi there', agents)).toEqual([]);
+    expect(keywordFallback('thanks!', agents)).toEqual([]);
+  });
+
+  it('returns [] for pure small talk in Spanish', () => {
+    expect(keywordFallback('hola', agents)).toEqual([]);
+    expect(keywordFallback('gracias', agents)).toEqual([]);
+  });
+
+  it('routes a Spanish valuation prompt to the valuation agent', () => {
+    // The prompt intentionally avoids "empresa" / "negocio" so it
+    // matches ONLY the valuation agent. Other tests cover the
+    // multi-agent fan-out.
+    expect(keywordFallback('Necesito un an\u00e1lisis de valoraci\u00f3n', agents)).toEqual([
+      'valuation',
+    ]);
+  });
+
+  it('routes a Spanish valuation+finance prompt to both agents', () => {
+    const result = keywordFallback(
+      'Quiero entender valoración y finanzas para mi pyme',
+      agents,
+    );
+    expect(result).toContain('valuation');
+    expect(result).toContain('financial');
+  });
+
+  it('routes "asesor\u00eda" to the advisory agent', () => {
+    expect(
+      keywordFallback('Necesito una asesor\u00eda contable y fiscal', agents),
+    ).toEqual(expect.arrayContaining(['advisory', 'financial']));
+  });
+
+  it('routes a tax question to the financial agent', () => {
+    expect(keywordFallback('How do I plan my taxes?', agents)).toEqual([
+      'financial',
+    ]);
+  });
+
+  it('routes an English business prompt to advisory + financial', () => {
+    const result = keywordFallback(
+      'Looking for advisory services and financial guidance',
+      agents,
+    );
+    expect(result).toContain('advisory');
+    expect(result).toContain('financial');
+  });
+
+  it('drops unknown agent ids from the keyword table', () => {
+    const limited = [{ id: 'advisory' }];
+    // "valoraci\u00f3n" routes to "valuation" which is NOT in the registry
+    // → must NOT appear, and the function must not throw.
+    expect(keywordFallback('valoraci\u00f3n de empresa', limited)).toEqual([
+      'advisory',
+    ]);
+  });
+
+  it('is case-insensitive', () => {
+    expect(keywordFallback('VALUATION of my company', agents)).toEqual([
+      'valuation',
+    ]);
+    expect(keywordFallback('Asesor\u00eda LEGAL', agents)).toContain('advisory');
+  });
+});
+
+describe('orchestrator.route keyword-fallback safety net', () => {
+  beforeEach(() => {
+    resetMetrics();
+  });
+
+  it('routes a Spanish valuation prompt via keyword fallback when the LLM returns []', async () => {
+    const warn = vi.fn();
+    const client = makeClient(() => ({
+      content: JSON.stringify({ agentsToRun: [], reasoning: 'no idea' }),
+    }));
+    const agents = [
+      makeAgent('advisory', 'Advisory services'),
+      makeAgent('valuation', 'Valuation services'),
+      makeAgent('financial', 'Financial services'),
+    ];
+
+    const decision = await route({
+      userMessage: 'Necesito un an\u00e1lisis de valoraci\u00f3n',
+      agents,
+      lang: 'es',
+      client,
+      requestId: 'req-fb-1',
+      warn,
+    });
+    expect(decision.agentsToRun).toEqual(['valuation']);
+    expect(decision.reasoning).toMatch(/keyword fallback/);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/orchestrator:keyword-fallback.*valuation/),
+    );
+
+    const { snapshot } = await import('../../src/observability/metrics.js');
+    const fb = snapshot().find((c) => c.name === 'dispatch_keyword_fallback_total');
+    expect(fb?.value).toBe(1);
+  });
+
+  it('routes an English business prompt via keyword fallback when the LLM returns []', async () => {
+    const warn = vi.fn();
+    const client = makeClient(() => ({
+      content: JSON.stringify({ agentsToRun: [], reasoning: '' }),
+    }));
+    const agents = [
+      makeAgent('advisory', 'A'),
+      makeAgent('valuation', 'V'),
+      makeAgent('financial', 'F'),
+    ];
+
+    const decision = await route({
+      userMessage: 'I need a quote for advisory and valuation',
+      agents,
+      lang: 'en',
+      client,
+      requestId: 'req-fb-2',
+      warn,
+    });
+    expect(decision.agentsToRun.sort()).toEqual(['advisory', 'valuation']);
+  });
+
+  it('does NOT invoke the fallback for genuine small talk', async () => {
+    const warn = vi.fn();
+    const client = makeClient(() => ({
+      content: JSON.stringify({ agentsToRun: [], reasoning: 'small talk' }),
+    }));
+    const agents = [
+      makeAgent('advisory', 'A'),
+      makeAgent('valuation', 'V'),
+    ];
+
+    const decision = await route({
+      userMessage: 'hola, buen día',
+      agents,
+      lang: 'es',
+      client,
+      requestId: 'req-fb-3',
+      warn,
+    });
+    expect(decision.agentsToRun).toEqual([]);
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringMatching(/orchestrator:keyword-fallback/),
+    );
+  });
+
+  it('preserves the LLM decision when the LLM already picked an agent (fallback is a safety net only)', async () => {
+    const client = makeClient(() => ({
+      content: JSON.stringify({
+        agentsToRun: ['valuation'],
+        reasoning: 'user asked for valuation',
+      }),
+    }));
+    const agents = [
+      makeAgent('advisory', 'A'),
+      makeAgent('valuation', 'V'),
+    ];
+
+    const decision = await route({
+      userMessage: 'valoraci\u00f3n de mi empresa',
+      agents,
+      lang: 'es',
+      client,
+      requestId: 'req-fb-4',
+    });
+    expect(decision.agentsToRun).toEqual(['valuation']);
+    expect(decision.reasoning).toBe('user asked for valuation');
   });
 });
