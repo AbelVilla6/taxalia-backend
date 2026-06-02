@@ -1,4 +1,6 @@
+import { streamSSE } from 'hono/streaming';
 import { Hono, type Context } from 'hono';
+import { runChatPipeline, type ChatRouteDeps } from './dispatch.js';
 import type { ArtifactRegistry } from '../loaders/registry.js';
 import { snapshot } from '../observability/metrics.js';
 import { getRequestId } from '../observability/requestId.js';
@@ -7,7 +9,9 @@ import {
   ChatRequestSchema,
   type Lang,
   type Message,
+  type SSEEvent,
 } from './schemas.js';
+import { PipelineError } from './errors.js';
 
 const HEALTH_MODEL = 'gemma4:e4b';
 
@@ -22,7 +26,10 @@ function lastUserMessage(messages: Message[]): Message | undefined {
   return undefined;
 }
 
-export function buildChatRouter(registry?: ArtifactRegistry): Hono {
+export function buildChatRouter(
+  registry?: ArtifactRegistry,
+  deps?: ChatRouteDeps,
+): Hono {
   const app = new Hono();
 
   app.get('/health', (c: Context) => {
@@ -83,8 +90,7 @@ export function buildChatRouter(registry?: ArtifactRegistry): Hono {
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       const path = issue?.path.join('.') ?? 'body';
-      const code =
-        path === 'lang' ? 'UNSUPPORTED_LANG' : 'BAD_REQUEST';
+      const code = path === 'lang' ? 'UNSUPPORTED_LANG' : 'BAD_REQUEST';
       return c.json(
         errorEnvelope(
           c,
@@ -103,21 +109,77 @@ export function buildChatRouter(registry?: ArtifactRegistry): Hono {
       );
     }
 
-    // Loaders and orchestrator land in PR3/PR4. Surface 501 to confirm
-    // the wire contract is wired (Zod accepted, lang valid, content non-empty)
-    // before the dispatch pipeline is implemented.
-    return c.json(
-      {
-        error: {
-          code: 'NOT_IMPLEMENTED',
-          message:
-            'Chat dispatch is not yet wired (PR3/PR4). Skeleton accepts the request envelope.',
-          requestId: getRequestId(c),
-        },
-        lang: parsed.data.lang satisfies Lang,
-      },
-      501,
-    );
+    if (!deps || !registry) {
+      return c.json(
+        errorEnvelope(
+          c,
+          'NOT_IMPLEMENTED',
+          'Chat dispatch is not yet wired (PR3/PR4). Skeleton accepts the request envelope.',
+        ),
+        501,
+      );
+    }
+
+    const requestId = getRequestId(c);
+    c.header('X-Accel-Buffering', 'no');
+
+    const pipelineRunner = deps.pipelineOverride ?? runChatPipeline;
+    let pipeline;
+    try {
+      pipeline = await pipelineRunner({
+        request: parsed.data,
+        requestId,
+        signal: c.req.raw.signal,
+        client: deps.client,
+        semaphore: deps.semaphore,
+        agentTimeoutMs: deps.agentTimeoutMs,
+        coldStart: deps.coldStart,
+        registry,
+      });
+    } catch (err) {
+      if (err instanceof PipelineError) {
+        return c.json(
+          errorEnvelope(c, err.code, err.message),
+          err.status as 400 | 500 | 503,
+        );
+      }
+      console.error('chat pipeline pre-stream failure', err);
+      return c.json(
+        errorEnvelope(
+          c,
+          'INTERNAL_ERROR',
+          err instanceof Error ? err.message : 'Pipeline failed.',
+        ),
+        500,
+      );
+    }
+
+    return streamSSE(c, async (stream) => {
+      stream.onAbort(() => {
+        // c.req.raw.signal already propagates; nothing else to do.
+      });
+
+      try {
+        for await (const event of pipeline.events) {
+          if (stream.aborted) return;
+          await stream.writeSSE({ data: JSON.stringify(event satisfies SSEEvent) });
+          if ('done' in event && event.done) return;
+        }
+      } catch (err) {
+        if (stream.aborted) return;
+        const code =
+          (err as { code?: string } | null)?.code ?? 'STREAM_ERROR';
+        const message = err instanceof Error ? err.message : 'Stream error.';
+        await stream.writeSSE({
+          data: JSON.stringify({
+            done: true,
+            agents: [],
+            error: { code, message },
+            requestId,
+          } satisfies SSEEvent),
+        });
+      }
+    });
   });
 
   return app;
