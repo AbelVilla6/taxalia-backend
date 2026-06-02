@@ -3,6 +3,7 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
 import { buildChatRouter } from './chat/routes.js';
+import { createArtifactRegistry } from './loaders/registry.js';
 import { createLogger } from './observability/logger.js';
 import { requestIdMiddleware } from './observability/requestId.js';
 
@@ -23,7 +24,7 @@ function createCorsGuard(allowlist: string[]): MiddlewareHandler {
   };
 }
 
-export function createApp(env: Env): Hono {
+export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   const app = new Hono();
 
   const allowlist = env.CORS_ALLOWED_ORIGINS.split(',')
@@ -42,7 +43,7 @@ export function createApp(env: Env): Hono {
     }),
   );
 
-  app.route('/', buildChatRouter());
+  app.route('/', buildChatRouter(registry));
 
   return app;
 }
@@ -54,10 +55,19 @@ function isMainEntry(): boolean {
   return entry.endsWith('server.ts') || entry.endsWith('server.js');
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const env = loadConfig();
-  const app = createApp(env);
   const logger = createLogger(env.LOG_LEVEL);
+  const registry = createArtifactRegistry();
+
+  try {
+    await registry.reload();
+  } catch (error) {
+    logger.fatal({ err: error }, 'artifact load failed at boot');
+    process.exit(1);
+  }
+
+  const app = createApp(env, registry);
   serve(
     { fetch: app.fetch, port: env.PORT },
     (info) => {
@@ -74,5 +84,5 @@ function main(): void {
 }
 
 if (isMainEntry()) {
-  main();
+  void main();
 }

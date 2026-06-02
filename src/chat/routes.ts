@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import type { ArtifactRegistry } from '../loaders/registry.js';
 import { snapshot } from '../observability/metrics.js';
 import { getRequestId } from '../observability/requestId.js';
 import { errorEnvelope } from './sse.js';
@@ -21,7 +22,7 @@ function lastUserMessage(messages: Message[]): Message | undefined {
   return undefined;
 }
 
-export function buildChatRouter(): Hono {
+export function buildChatRouter(registry?: ArtifactRegistry): Hono {
   const app = new Hono();
 
   app.get('/health', (c: Context) => {
@@ -30,6 +31,41 @@ export function buildChatRouter(): Hono {
 
   app.get('/metrics', (c: Context) => {
     return c.json({ counters: snapshot() });
+  });
+
+  app.post('/admin/reload', async (c: Context) => {
+    if (process.env.NODE_ENV === 'production') {
+      return c.notFound();
+    }
+
+    if (!registry) {
+      return c.json(
+        errorEnvelope(c, 'RELOAD_UNAVAILABLE', 'Artifact registry is not configured.'),
+        500,
+      );
+    }
+
+    try {
+      const next = await registry.reload();
+      return c.json({
+        ok: true,
+        counts: {
+          agents: next.agents.length,
+          skills: next.skills.length,
+          conducta: next.conducta.length,
+        },
+        requestId: getRequestId(c),
+      });
+    } catch (error) {
+      return c.json(
+        errorEnvelope(
+          c,
+          'RELOAD_FAILED',
+          error instanceof Error ? error.message : 'Reload failed.',
+        ),
+        500,
+      );
+    }
   });
 
   app.post('/chat', async (c: Context) => {
