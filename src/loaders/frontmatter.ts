@@ -32,18 +32,20 @@ export function parseMarkdownFrontmatter(filePath: string, source: string): {
   frontmatter: Frontmatter;
   body: string;
 } {
-  if (!source.startsWith('---\n')) {
+  const normalizedSource = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+
+  if (!normalizedSource.startsWith('---\n')) {
     throw new LoaderError(`Artifact at ${filePath} is missing YAML frontmatter.`);
   }
 
-  const end = source.indexOf('\n---', 4);
+  const end = normalizedSource.indexOf('\n---', 4);
   if (end === -1) {
     throw new LoaderError(`Artifact at ${filePath} has unparseable YAML frontmatter.`);
   }
 
-  const yaml = source.slice(4, end).split('\n');
-  const bodyStart = source.indexOf('\n', end + 4);
-  const body = bodyStart === -1 ? '' : source.slice(bodyStart + 1).trim();
+  const yaml = normalizedSource.slice(4, end).split('\n');
+  const bodyStart = normalizedSource.indexOf('\n', end + 4);
+  const body = bodyStart === -1 ? '' : normalizedSource.slice(bodyStart + 1).trim();
   const frontmatter: Frontmatter = {};
 
   for (let i = 0; i < yaml.length; i++) {

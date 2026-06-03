@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadAgents } from '../../src/agents/loader.js';
 import { loadConducta } from '../../src/conducta/loader.js';
+import { parseMarkdownFrontmatter } from '../../src/loaders/frontmatter.js';
 import { loadSkills } from '../../src/skills/loader.js';
 
 let root: string;
@@ -23,6 +24,15 @@ async function write(dir: string, name: string, frontmatter: string): Promise<vo
 }
 
 describe('loaders', () => {
+  it('parses frontmatter with Windows line endings and UTF-8 BOM', () => {
+    const source = '\uFEFF---\r\nid: advisory\r\nname: Advisory\r\n---\r\n# Body\r\n';
+
+    const result = parseMarkdownFrontmatter('advisory.md', source);
+
+    expect(result.frontmatter).toMatchObject({ id: 'advisory', name: 'Advisory' });
+    expect(result.body).toBe('# Body');
+  });
+
   it('loads valid agent, skill, and conducta frontmatter', async () => {
     await write('agents', 'advisory.md', 'id: advisory\nname: Advisory\ndescription: Helps\nsystem_prompt: |\n  System prompt\ntools: [lookup-engagement-model]\ntags: [advisory]');
     await write('skills', 'lookup-engagement-model.md', 'id: lookup-engagement-model\nname: Lookup\ndescription: Finds engagement model');
