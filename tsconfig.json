@@ -13,6 +13,8 @@
     "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
+    "strict": true,
+    "strictNullChecks": true,
     "paths": {
       "@/*": ["./src/*"]
     }
