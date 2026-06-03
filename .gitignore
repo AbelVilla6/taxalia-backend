@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+
+# build/test output
+dist/
+coverage/
+
+# environment variables
+.env
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+.idea/
