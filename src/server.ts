@@ -13,6 +13,12 @@ import { ColdStartGate } from './chat/coldStart.js';
 function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
     const origin = c.req.header('Origin');
+
+    if (c.req.method === 'OPTIONS') {
+      await next();
+      return;
+    }
+
     if (origin && !allowlist.includes(origin)) {
       logger.warn(
         {
@@ -24,8 +30,16 @@ function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler
         },
         'CORS origin not in allowlist',
       );
-      return c.body(null, 403);
+
+      return c.json(
+        {
+          error: 'CORS_ORIGIN_NOT_ALLOWED',
+          origin,
+        },
+        403,
+      );
     }
+
     await next();
   };
 }
@@ -39,19 +53,22 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     .filter(Boolean);
 
   app.use('*', requestIdMiddleware);
-  app.use('*', createCorsGuard(allowlist, logger));
+
   app.use(
     '*',
     cors({
       origin: allowlist,
       allowMethods: ['GET', 'POST', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Accept', 'X-Request-Id'],
+      allowHeaders: ['Content-Type', 'Accept', 'X-Request-Id', 'Authorization'],
       credentials: false,
     }),
   );
 
+  app.use('*', createCorsGuard(allowlist, logger));
+
   const client = createOllamaClient({
     host: env.OLLAMA_HOST,
+    apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
   const semaphore = new Semaphore(env.DISPATCH_CONCURRENCY_CAP);
@@ -84,6 +101,7 @@ async function main(): Promise<void> {
   const registry = createArtifactRegistry();
   const client = createOllamaClient({
     host: env.OLLAMA_HOST,
+    apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
 

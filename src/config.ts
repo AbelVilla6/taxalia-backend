@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const EnvSchema = z.object({
   OLLAMA_HOST: z.string().url().default('http://127.0.0.1:11434'),
+  OLLAMA_API_KEY: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(4324),
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   CORS_ALLOWED_ORIGINS: z

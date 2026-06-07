@@ -10,13 +10,19 @@ import type {
 export type OllamaClientOptions = {
   host: string;
   timeoutMs: number;
+  apiKey?: string;
   ollama?: Ollama;
 };
 
 export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
-  const { host, ollama: provided, timeoutMs } = options;
+  const { apiKey, host, ollama: provided, timeoutMs } = options;
   const ollama =
-    provided ?? new Ollama({ host, fetch: buildFetchWithTimeout(timeoutMs) });
+    provided ??
+    new Ollama({
+      host,
+      fetch: buildFetchWithTimeout(timeoutMs),
+      ...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
+    });
   const stream = createOllamaStreamAdapter(ollama);
 
   return {
