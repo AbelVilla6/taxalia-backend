@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { handle } from '@hono/node-server/vercel';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
@@ -73,6 +74,19 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   });
   const semaphore = new Semaphore(env.DISPATCH_CONCURRENCY_CAP);
   const coldStart = new ColdStartGate(60_000);
+
+  app.get('/', (c) => {
+    return c.json({
+      ok: true,
+      service: 'taxalia-chat-backend',
+    });
+  });
+
+  app.get('/health', (c) => {
+    return c.json({
+      ok: true,
+    });
+  });
 
   app.route(
     '/',
@@ -154,7 +168,7 @@ async function main(): Promise<void> {
 const env = loadConfig();
 const app = createApp(env);
 
-export default app;
+export default handle(app);
 
 if (isMainEntry()) {
   void main();
