@@ -1,7 +1,8 @@
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 
 const EnvSchema = z.object({
-  OLLAMA_HOST: z.string().url().default('http://127.0.0.1:11434'),
+  OLLAMA_HOST: z.string().url().optional(),
   OLLAMA_API_KEY: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(4324),
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
@@ -14,9 +15,13 @@ const EnvSchema = z.object({
   DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
 });
 
-export type Env = z.infer<typeof EnvSchema>;
+export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST'> & {
+  OLLAMA_HOST: string;
+};
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
+  loadDotEnvIfNeeded(source);
+
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues
@@ -24,7 +29,30 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
-  return parsed.data;
+  return {
+    ...parsed.data,
+    OLLAMA_HOST: normalizeOllamaHost(
+      parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
+    ),
+  };
+}
+
+function loadDotEnvIfNeeded(source: NodeJS.ProcessEnv): void {
+  if (source !== process.env) return;
+  if (!existsSync('.env')) return;
+  if (typeof process.loadEnvFile !== 'function') return;
+
+  process.loadEnvFile('.env');
+}
+
+function defaultOllamaHost(nodeEnv: string | undefined): string {
+  return nodeEnv === 'production'
+    ? 'https://ollama.com'
+    : 'http://127.0.0.1:11434';
+}
+
+function normalizeOllamaHost(host: string): string {
+  return host.replace(/\/+$/, '').replace(/\/api$/, '');
 }
 
 export function corsAllowlist(env: Env): string[] {
