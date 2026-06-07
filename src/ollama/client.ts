@@ -19,7 +19,7 @@ export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
   const ollama =
     provided ??
     new Ollama({
-      host,
+      host: toOllamaClientHost(host),
       fetch: buildFetchWithTimeout(timeoutMs),
       ...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
     });
@@ -103,6 +103,10 @@ export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
       }
     },
   };
+}
+
+export function toOllamaClientHost(host: string): string {
+  return host.replace(/\/+$/, '').replace(/\/api$/, '');
 }
 
 function hasImages(

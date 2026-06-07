@@ -31,9 +31,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
   }
   return {
     ...parsed.data,
-    OLLAMA_HOST: normalizeOllamaHost(
-      parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
-    ),
+    OLLAMA_HOST: parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
   };
 }
 
@@ -47,12 +45,8 @@ function loadDotEnvIfNeeded(source: NodeJS.ProcessEnv): void {
 
 function defaultOllamaHost(nodeEnv: string | undefined): string {
   return nodeEnv === 'production'
-    ? 'https://ollama.com'
-    : 'http://127.0.0.1:11434';
-}
-
-function normalizeOllamaHost(host: string): string {
-  return host.replace(/\/+$/, '').replace(/\/api$/, '');
+    ? 'https://ollama.com/api'
+    : 'http://127.0.0.1:11434/api';
 }
 
 export function corsAllowlist(env: Env): string[] {

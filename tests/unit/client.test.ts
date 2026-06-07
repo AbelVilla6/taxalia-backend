@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createOllamaClient } from '../../src/ollama/client.js';
+import { createOllamaClient, toOllamaClientHost } from '../../src/ollama/client.js';
 import { MODEL } from '../../src/ollama/models.js';
 import { wrapOllamaError } from '../../src/ollama/stream.js';
 
@@ -31,6 +31,19 @@ describe('OllamaClient.checkModel', () => {
     await expect(client.checkModel()).rejects.toMatchObject({
       code: 'OLLAMA_UNREACHABLE',
     });
+  });
+});
+
+describe('toOllamaClientHost', () => {
+  it('adapts OLLAMA_HOST values ending in /api for ollama-js', () => {
+    expect(toOllamaClientHost('http://127.0.0.1:11434/api')).toBe(
+      'http://127.0.0.1:11434',
+    );
+    expect(toOllamaClientHost('https://ollama.com/api')).toBe('https://ollama.com');
+  });
+
+  it('keeps deployed base origins without /api unchanged', () => {
+    expect(toOllamaClientHost('https://chat.example.com')).toBe('https://chat.example.com');
   });
 });
 
