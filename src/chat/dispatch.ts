@@ -14,6 +14,7 @@ import type { OrchestratorDecision } from '../dispatch/types.js';
 import { route } from '../dispatch/orchestrator.js';
 import { runAgents } from '../dispatch/parallel.js';
 import { streamSynthesizeChunks } from '../dispatch/synthesizer.js';
+import { DEFAULT_LOCAL_MODEL } from '../ollama/models.js';
 import type {
   ArtifactRegistry,
   ArtifactRegistrySnapshot,
@@ -41,6 +42,7 @@ const WARNINGS: Record<
 
 export type ChatRouteDeps = {
   client: OllamaClient;
+  model?: string;
   semaphore: Semaphore;
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
@@ -64,6 +66,7 @@ export type PipelineRunOptions = {
   requestId: string;
   signal: AbortSignal;
   client: OllamaClient;
+  model?: string;
   semaphore: Semaphore;
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
@@ -125,6 +128,7 @@ async function preflightPipeline(
   opts: PipelineRunOptions,
 ): Promise<PreflightResult> {
   const { request, requestId, signal } = opts;
+  const model = opts.model ?? DEFAULT_LOCAL_MODEL;
   const logger =
     opts.logger ?? getDefaultLogger().child({ requestId, layer: 'pipeline' });
   const lang = request.lang;
@@ -165,6 +169,7 @@ async function preflightPipeline(
     requestId,
     signal,
     logger,
+    model,
   });
   const orchestratorMs = Math.round(performance.now() - orchestratorStart);
 
@@ -196,6 +201,7 @@ async function preflightPipeline(
     agentTimeoutMs: opts.agentTimeoutMs,
     coldStart: opts.coldStart,
     logger,
+    model,
   });
   const dispatchMs = Math.round(performance.now() - dispatchStart);
 
@@ -245,6 +251,7 @@ async function runOrchestrator(args: {
   requestId: string;
   signal: AbortSignal;
   logger: Logger;
+  model: string;
 }): Promise<OrchestratorDecision> {
   try {
     return await route({
@@ -276,7 +283,7 @@ async function runOrchestrator(args: {
       throw new PipelineError(
         'MODEL_MISSING',
         503,
-        "Model 'gemma4:e4b' is not pulled. Run 'npm run setup' to install it.",
+        `Model '${args.model}' is not available. Check OLLAMA_MODEL and Ollama access. Run 'npm run setup' for local models.`,
       );
     }
     args.logger.error(
@@ -299,6 +306,7 @@ async function runDispatch(args: {
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
   logger: Logger;
+  model: string;
 }): Promise<AgentResult[]> {
   const coldBudget = args.coldStart.takeColdBudgetMs();
   const perAgentTimeout = Math.max(args.agentTimeoutMs, coldBudget ?? 0);
@@ -345,7 +353,7 @@ async function runDispatch(args: {
       throw new PipelineError(
         'MODEL_MISSING',
         503,
-        "Model 'gemma4:e4b' is not pulled. Run 'npm run setup' to install it.",
+        `Model '${args.model}' is not available. Check OLLAMA_MODEL and Ollama access. Run 'npm run setup' for local models.`,
       );
     }
     args.logger.error(

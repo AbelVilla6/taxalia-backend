@@ -1,5 +1,5 @@
 import { Ollama } from 'ollama';
-import { MODEL } from './models.js';
+import { DEFAULT_LOCAL_MODEL } from './models.js';
 import { createOllamaStreamAdapter, wrapOllamaError } from './stream.js';
 import type {
   OllamaChatRequest,
@@ -9,13 +9,14 @@ import type {
 
 export type OllamaClientOptions = {
   host: string;
+  model?: string;
   timeoutMs: number;
   apiKey?: string;
   ollama?: Ollama;
 };
 
 export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
-  const { apiKey, host, ollama: provided, timeoutMs } = options;
+  const { apiKey, host, model = DEFAULT_LOCAL_MODEL, ollama: provided, timeoutMs } = options;
   const ollama =
     provided ??
     new Ollama({
@@ -23,7 +24,7 @@ export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
       fetch: buildFetchWithTimeout(timeoutMs),
       ...(apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : {}),
     });
-  const stream = createOllamaStreamAdapter(ollama);
+  const stream = createOllamaStreamAdapter(ollama, model);
 
   return {
     async chatOnce(args: OllamaChatRequest): Promise<OllamaChatResponse> {
@@ -41,7 +42,7 @@ export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
       try {
         const chatPromise = (async (): Promise<OllamaChatResponse> => {
           const res = await ollama.chat({
-            model: MODEL,
+            model,
             messages: [{ role: 'system', content: args.system }, ...args.messages],
             stream: false,
             ...(args.format ? { format: args.format } : {}),
@@ -97,7 +98,7 @@ export function createOllamaClient(options: OllamaClientOptions): OllamaClient {
 
     async checkModel(): Promise<void> {
       try {
-        await ollama.show({ model: MODEL });
+        await ollama.show({ model });
       } catch (err) {
         throw wrapOllamaError(err);
       }

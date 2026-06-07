@@ -7,6 +7,7 @@ import type { Env } from '../../src/config.js';
 
 const ENV: Env = {
   OLLAMA_HOST: 'http://127.0.0.1:11434',
+  OLLAMA_MODEL: 'gemma4:e4b',
   PORT: 4324,
   OLLAMA_AGENT_TIMEOUT_MS: 30_000,
   CORS_ALLOWED_ORIGINS: 'http://localhost:4321,http://localhost:4322',

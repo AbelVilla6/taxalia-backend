@@ -13,8 +13,7 @@ import {
   type SSEEvent,
 } from './schemas.js';
 import { PipelineError } from './errors.js';
-
-const HEALTH_MODEL = 'gemma4:e4b';
+import { DEFAULT_LOCAL_MODEL } from '../ollama/models.js';
 
 function isWhitespace(s: string): boolean {
   return s.trim().length === 0;
@@ -34,7 +33,7 @@ export function buildChatRouter(
   const app = new Hono();
 
   app.get('/health', (c: Context) => {
-    return c.json({ ok: true, model: HEALTH_MODEL });
+    return c.json({ ok: true, model: deps?.model ?? DEFAULT_LOCAL_MODEL });
   });
 
   app.get('/metrics', (c: Context) => {
@@ -173,6 +172,7 @@ export function buildChatRouter(
         requestId,
         signal: c.req.raw.signal,
         client: deps.client,
+        model: deps.model,
         semaphore: deps.semaphore,
         agentTimeoutMs: deps.agentTimeoutMs,
         coldStart: deps.coldStart,

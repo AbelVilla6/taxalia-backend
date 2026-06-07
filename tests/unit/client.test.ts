@@ -14,6 +14,18 @@ describe('OllamaClient.checkModel', () => {
     expect(show).toHaveBeenCalledWith({ model: MODEL });
   });
 
+  it('uses a configured model for checkModel', async () => {
+    const show = vi.fn().mockResolvedValue({ model_info: {} });
+    const client = createOllamaClient({
+      ollama: { show } as never,
+      host: 'http://x',
+      model: 'gemma4:31b-cloud',
+      timeoutMs: 1000,
+    });
+    await expect(client.checkModel()).resolves.toBeUndefined();
+    expect(show).toHaveBeenCalledWith({ model: 'gemma4:31b-cloud' });
+  });
+
   it('throws MODEL_MISSING with npm run setup hint when /api/show 404s', async () => {
     const show = vi.fn().mockRejectedValue(
       new Error("model 'gemma4:e4b' not found"),
@@ -65,6 +77,25 @@ describe('OllamaClient.chatOnce', () => {
         format: 'json',
         stream: false,
       }),
+    );
+  });
+
+  it('uses a configured model for chatOnce', async () => {
+    const chat = vi.fn().mockResolvedValue({
+      message: { role: 'assistant', content: '{}' },
+    });
+    const client = createOllamaClient({
+      ollama: { chat } as never,
+      host: 'http://x',
+      model: 'gemma4:31b-cloud',
+      timeoutMs: 1000,
+    });
+    await client.chatOnce({
+      system: 'sys',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(chat).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gemma4:31b-cloud' }),
     );
   });
 

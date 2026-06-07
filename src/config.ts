@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
+import { DEFAULT_LOCAL_MODEL, DEFAULT_PRODUCTION_MODEL } from './ollama/models.js';
 
 const EnvSchema = z.object({
   OLLAMA_HOST: z.string().url().optional(),
   OLLAMA_API_KEY: z.string().optional(),
+  OLLAMA_MODEL: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(4324),
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   CORS_ALLOWED_ORIGINS: z
@@ -15,8 +17,9 @@ const EnvSchema = z.object({
   DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
 });
 
-export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST'> & {
+export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST' | 'OLLAMA_MODEL'> & {
   OLLAMA_HOST: string;
+  OLLAMA_MODEL: string;
 };
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
@@ -32,6 +35,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
   return {
     ...parsed.data,
     OLLAMA_HOST: parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
+    OLLAMA_MODEL: parsed.data.OLLAMA_MODEL ?? defaultOllamaModel(source.NODE_ENV),
   };
 }
 
@@ -47,6 +51,10 @@ function defaultOllamaHost(nodeEnv: string | undefined): string {
   return nodeEnv === 'production'
     ? 'https://ollama.com/api'
     : 'http://127.0.0.1:11434/api';
+}
+
+function defaultOllamaModel(nodeEnv: string | undefined): string {
+  return nodeEnv === 'production' ? DEFAULT_PRODUCTION_MODEL : DEFAULT_LOCAL_MODEL;
 }
 
 export function corsAllowlist(env: Env): string[] {

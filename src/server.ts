@@ -89,6 +89,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
 
   const client = createOllamaClient({
     host: env.OLLAMA_HOST,
+    model: env.OLLAMA_MODEL,
     apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
@@ -133,6 +134,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     '/',
     buildChatRouter(registry, {
       client,
+      model: env.OLLAMA_MODEL,
       semaphore,
       agentTimeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
       coldStart,
@@ -159,6 +161,7 @@ async function main(): Promise<void> {
   const registry = createArtifactRegistry();
   const client = createOllamaClient({
     host: env.OLLAMA_HOST,
+    model: env.OLLAMA_MODEL,
     apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
@@ -176,8 +179,8 @@ async function main(): Promise<void> {
     const code = (err as { code?: string } | null)?.code;
     if (code === 'MODEL_MISSING') {
       logger.fatal(
-        { model: 'gemma4:e4b' },
-        "MODEL_MISSING: gemma4:e4b not found. Run 'npm run setup'.",
+        { model: env.OLLAMA_MODEL },
+        `MODEL_MISSING: ${env.OLLAMA_MODEL} not found. Run 'npm run setup'.`,
       );
     } else if (code === 'OLLAMA_UNREACHABLE') {
       logger.fatal(
@@ -198,6 +201,7 @@ async function main(): Promise<void> {
         {
           port: info.port,
           ollamaHost: env.OLLAMA_HOST,
+          ollamaModel: env.OLLAMA_MODEL,
           allowlist: env.CORS_ALLOWED_ORIGINS.split(','),
         },
         'chatbot-backend listening',

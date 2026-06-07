@@ -51,7 +51,7 @@ describe('chatStream (ollama stream adapter)', () => {
       makeChunk(''),
       makeChunk('', true),
     ]);
-    const adapter = createOllamaStreamAdapter(stub);
+    const adapter = createOllamaStreamAdapter(stub, 'gemma4:e4b');
 
     const collected: string[] = [];
     for await (const delta of adapter.chatStream({
@@ -83,7 +83,7 @@ describe('chatStream (ollama stream adapter)', () => {
           },
         }),
     } as unknown as Ollama;
-    const adapter = createOllamaStreamAdapter(stub);
+    const adapter = createOllamaStreamAdapter(stub, 'gemma4:e4b');
     const controller = new AbortController();
     const start = performance.now();
     const consumer = (async () => {
@@ -109,7 +109,7 @@ describe('chatStream (ollama stream adapter)', () => {
     const stub = {
       chat: () => Promise.reject(new Error('ECONNREFUSED')),
     } as unknown as Ollama;
-    const adapter = createOllamaStreamAdapter(stub);
+    const adapter = createOllamaStreamAdapter(stub, 'gemma4:e4b');
 
     await expect(
       (async () => {

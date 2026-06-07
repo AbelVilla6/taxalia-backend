@@ -3,7 +3,7 @@ import type { OllamaChatStreamRequest, OllamaClient } from './interface.js';
 
 export type StreamAdapter = Pick<OllamaClient, 'chatStream'>;
 
-export function createOllamaStreamAdapter(ollama: Ollama): StreamAdapter {
+export function createOllamaStreamAdapter(ollama: Ollama, model: string): StreamAdapter {
   return {
     async *chatStream({
       system,
@@ -18,7 +18,7 @@ export function createOllamaStreamAdapter(ollama: Ollama): StreamAdapter {
       let iterator: AsyncGenerator<ChatResponse, void, unknown>;
       try {
         const response = await ollama.chat({
-          model: 'gemma4:e4b',
+          model,
           messages: ollamaMessages,
           stream: true,
         });
@@ -75,7 +75,7 @@ export function wrapOllamaError(err: unknown): Error & { code: string } {
     wrapped.cause = base;
     return wrapped;
   }
-  if (/model ['"]?gemma4:e4b['"]? not found|404/i.test(message)) {
+  if (/model .*not found|404/i.test(message)) {
     const wrapped = new Error(
       `Model not found: ${message}. Run 'npm run setup'.`,
     ) as Error & { code: string };
