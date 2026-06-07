@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/server.ts": {
+      "includeFiles": "src/{agents,skills,conducta}/**"
+    }
+  }
+}
