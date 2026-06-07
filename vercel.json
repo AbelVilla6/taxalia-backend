@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "src/server.ts": {
+      "includeFiles": [
+        "src/conducta/*.md"
+      ]
+    }
+  }
+}
