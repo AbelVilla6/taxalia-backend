@@ -49,6 +49,26 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   const app = new Hono();
   const logger = getDefaultLogger();
 
+  app.onError((err, c) => {
+    logger.error(
+      {
+        err,
+        requestId: c.req.header('X-Request-Id') ?? 'unknown',
+        path: c.req.path,
+        method: c.req.method,
+      },
+      'Unhandled backend error',
+    );
+
+    return c.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+        message: err instanceof Error ? err.message : String(err),
+      },
+      500,
+    );
+  });
+
   const allowlist = env.CORS_ALLOWED_ORIGINS.split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -74,6 +94,27 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   });
   const semaphore = new Semaphore(env.DISPATCH_CONCURRENCY_CAP);
   const coldStart = new ColdStartGate(60_000);
+
+  app.get('/health/ollama', async (c) => {
+    try {
+      await client.checkModel();
+
+      return c.json({
+        ok: true,
+        ollamaHost: env.OLLAMA_HOST,
+      });
+    } catch (err) {
+      return c.json(
+        {
+          ok: false,
+          ollamaHost: env.OLLAMA_HOST,
+          error: err instanceof Error ? err.message : String(err),
+          code: (err as { code?: string } | null)?.code,
+        },
+        500,
+      );
+    }
+  });
 
   app.get('/', (c) => {
     return c.json({
@@ -166,7 +207,11 @@ async function main(): Promise<void> {
 }
 
 const env = loadConfig();
-const app = createApp(env);
+const registry = createArtifactRegistry();
+
+await registry.reload();
+
+const app = createApp(env, registry);
 
 export default handle(app);
 
