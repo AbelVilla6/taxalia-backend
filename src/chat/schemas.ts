@@ -39,6 +39,7 @@ export type AgentResult = z.infer<typeof AgentResultSchema>;
 
 export const DoneEnvelopeSchema = z.object({
   done: z.literal(true),
+  agentResponse: z.boolean(),
   agents: z.array(AgentResultSchema),
   warning: z.string().optional(),
   error: z

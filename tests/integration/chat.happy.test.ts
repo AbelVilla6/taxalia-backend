@@ -97,6 +97,7 @@ describe('POST /chat happy path (SSE)', () => {
             yield delta2;
             const done: DoneEnvelope = {
               done: true,
+              agentResponse: true,
               agents: makeAgentResult(),
               requestId: args.requestId,
             };
@@ -140,6 +141,7 @@ describe('POST /chat happy path (SSE)', () => {
     }
     const doneEvent = last as DoneEnvelope;
     expect(doneEvent.done).toBe(true);
+    expect(doneEvent.agentResponse).toBe(true);
     expect(doneEvent.requestId).toBe('req-happy-1');
     expect(doneEvent.agents).toHaveLength(2);
     expect(doneEvent.agents.map((a) => a.id).sort()).toEqual(['advisory', 'valuation']);
@@ -155,6 +157,7 @@ describe('POST /chat happy path (SSE)', () => {
             yield { delta: 'hi' };
             yield {
               done: true,
+              agentResponse: true,
               agents: [{ id: 'advisory', status: 'ok', text: 'hi', durationMs: 1 }],
               requestId: args.requestId,
             };
@@ -188,6 +191,7 @@ describe('POST /chat happy path (SSE)', () => {
             yield { delta: 'x' };
             yield {
               done: true,
+              agentResponse: false,
               agents: [],
               requestId: args.requestId,
             };
@@ -219,6 +223,7 @@ describe('POST /chat happy path (SSE)', () => {
             yield { delta: 'mundo' };
             yield {
               done: true,
+              agentResponse: true,
               agents: [
                 { id: 'advisory', status: 'ok', text: 'Hola mundo', durationMs: 5 },
               ],

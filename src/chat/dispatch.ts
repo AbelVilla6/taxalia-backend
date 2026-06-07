@@ -117,6 +117,12 @@ type PreflightResult = {
   logger: Logger;
 };
 
+function hasAgentResponse(agentResults: AgentResult[]): boolean {
+  return agentResults.some(
+    (r) => r.status === 'ok' && typeof r.text === 'string' && r.text.trim().length > 0,
+  );
+}
+
 /**
  * Run everything that must succeed BEFORE the SSE stream opens:
  * request validation, agent registry check, orchestrator route, and
@@ -387,6 +393,7 @@ async function* postStreamEvents(
     signal,
     logger,
   } = p;
+  const agentResponse = hasAgentResponse(agentResults);
 
   // Edge: orchestrator picked nothing (and keyword fallback had no
   // match either) → emit a single delta with a localized warning so
@@ -402,6 +409,7 @@ async function* postStreamEvents(
     yield { delta: message };
     yield {
       done: true,
+      agentResponse: false,
       agents: [],
       warning: message,
       requestId,
@@ -429,6 +437,7 @@ async function* postStreamEvents(
     }
     yield {
       done: true,
+      agentResponse,
       agents: agentResults,
       warning: allFailed ? WARNINGS[lang].allFailed : undefined,
       requestId,
@@ -464,6 +473,7 @@ async function* postStreamEvents(
     );
     yield {
       done: true,
+      agentResponse,
       agents: agentResults,
       warning: allFailed ? WARNINGS[lang].allFailed : WARNINGS[lang].partial,
       requestId,
@@ -480,6 +490,7 @@ async function* postStreamEvents(
     yield { delta: WARNINGS[lang].allFailed };
     yield {
       done: true,
+      agentResponse,
       agents: agentResults,
       warning: WARNINGS[lang].allFailed,
       requestId,
@@ -525,6 +536,7 @@ async function* postStreamEvents(
 
   const finalEvent: DoneEnvelope = {
     done: true,
+    agentResponse,
     agents: agentResults,
     warning: partial ? WARNINGS[lang].partial : undefined,
     requestId,

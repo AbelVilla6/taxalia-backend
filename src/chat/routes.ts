@@ -294,6 +294,7 @@ export function buildChatRouter(
         await stream.writeSSE({
           data: JSON.stringify({
             done: true,
+            agentResponse: false,
             agents: [],
             error: { code, message },
             requestId,

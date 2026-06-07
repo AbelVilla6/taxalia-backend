@@ -161,6 +161,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
+    expect(last.agentResponse).toBe(true);
     expect(last.agents).toHaveLength(1);
     expect(last.agents[0]?.id).toBe('valuation');
   });
@@ -196,6 +197,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
+    expect(last.agentResponse).toBe(false);
     expect(last.warning).toBeTruthy();
     expect(last.warning).toMatch(/Taxalia|asesor|valoraci|financier/i);
   });
@@ -228,6 +230,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.warning).toBeTruthy();
+    expect(last.agentResponse).toBe(false);
   });
 
   it('keyword fallback routes a Spanish business prompt to an agent when the LLM returns []', async () => {
@@ -262,6 +265,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
+    expect(last.agentResponse).toBe(true);
     expect(last.agents.map((a) => a.id)).toContain('valuation');
   });
 });
