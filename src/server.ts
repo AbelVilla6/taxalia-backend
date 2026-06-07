@@ -90,8 +90,11 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
 
 function isMainEntry(): boolean {
   if (typeof process === 'undefined') return false;
+  if (process.env.VERCEL) return false;
+
   const entry = process.argv[1];
   if (!entry) return false;
+
   return entry.endsWith('server.ts') || entry.endsWith('server.js');
 }
 
@@ -147,6 +150,11 @@ async function main(): Promise<void> {
     },
   );
 }
+
+const env = loadConfig();
+const app = createApp(env);
+
+export default app;
 
 if (isMainEntry()) {
   void main();
