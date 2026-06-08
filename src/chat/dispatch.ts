@@ -33,10 +33,10 @@ const WARNINGS: Record<
       "I couldn't match your question to a Taxalia service. Please mention if you need advisory, valuation, or financial help and I'll route you to the right assistant.",
   },
   es: {
-    partial: 'Algunos agentes reportaron fallos parciales; la respuesta podría estar incompleta.',
+    partial: 'Algunos agentes han reportado fallos parciales; la respuesta podría estar incompleta.',
     allFailed: 'Todos los agentes fallaron.',
     noAgents:
-      'No pude identificar a qué servicio de Taxalia corresponde tu pregunta. Indicanos si necesitás asesoría, valoración o ayuda financiera y te derivamos al asistente correcto.',
+      'No he podido identificar a qué servicio de Taxalia corresponde tu pregunta. Indícanos si necesitas asesoría, valoración o ayuda financiera y te derivamos al asistente correcto.',
   },
 };
 

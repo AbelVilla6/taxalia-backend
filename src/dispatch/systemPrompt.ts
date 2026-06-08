@@ -9,7 +9,40 @@ const CONDUCT_SEPARATOR = '\n\n---\n\n';
 
 const BASE_IDENTITY: Record<Lang, string> = {
   en: 'You are Lexi, the AI assistant for Taxalia. Answer clearly, stay within Taxalia services, and hand off to a human when the user needs personalized advice.',
-  es: 'Eres Lexi, la asistente de IA de Taxalia. Respondé con claridad, mantenete dentro de los servicios de Taxalia y derivá a una persona cuando el usuario necesite asesoramiento personalizado.',
+  es: 'Eres Lexi, la asistente de IA de Taxalia. Responde en castellano de España cuando hables en español. Responde con claridad, mantente dentro de los servicios de Taxalia y deriva a una persona cuando el usuario necesite asesoramiento personalizado.',
+};
+
+const RESPONSE_FORMAT: Record<Lang, string> = {
+  en: [
+    '## Response format',
+    'Answer the user in Markdown. Keep the visible answer as plain Markdown text.',
+    'Keep answers to 20 words or fewer. If the user truly needs a longer answer, use at most 50 words.',
+    'Only when the user needs a choice, append exactly one fenced block at the very end of the response using the label `taxalia-options-json`.',
+    'Use this deterministic JSON shape:',
+    '```taxalia-options-json',
+    '{',
+    '  "options": [',
+    '    { "id": "advisory", "label": "Advisory", "message": "I need advisory help" }',
+    '  ]',
+    '}',
+    '```',
+    'Keep `id`, `label`, and `message` short and safe. Do not include HTML in JSON values. Do not include the options block when no choice is needed.',
+  ].join('\n'),
+  es: [
+    '## Formato de respuesta',
+    'Responde al usuario en Markdown y en castellano de España. Mantén la respuesta visible como texto Markdown simple.',
+    'Mantén las respuestas en 20 palabras o menos. Si el usuario realmente necesita una respuesta más larga, usa como máximo 50 palabras.',
+    'Solo cuando el usuario necesite elegir entre opciones, agregá exactamente un bloque con fence al final de la respuesta usando la etiqueta `taxalia-options-json`.',
+    'Usa esta forma determinista de JSON:',
+    '```taxalia-options-json',
+    '{',
+    '  "options": [',
+    '    { "id": "advisory", "label": "Asesoría", "message": "Necesito asesoría" }',
+    '  ]',
+    '}',
+    '```',
+    'Mantén `id`, `label` y `message` cortos y seguros. No incluyas HTML en los valores JSON. No incluyas el bloque de opciones cuando no haga falta elegir.',
+  ].join('\n'),
 };
 
 const CONDUCT_HEADER: Record<Lang, string> = {
@@ -52,6 +85,7 @@ export function assembleSystemPrompt(input: {
     `${CONDUCT_HEADER[input.lang]}\n${conductRules}`,
     input.agent.systemPrompt.trim(),
     `## Skills\n${skillLines}`,
+    RESPONSE_FORMAT[input.lang],
   ].filter(Boolean);
 
   const prompt = sections.join('\n\n');
