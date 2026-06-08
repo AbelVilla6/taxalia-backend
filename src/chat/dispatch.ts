@@ -7,6 +7,7 @@ import type {
   SSEEvent,
 } from './schemas.js';
 import { isModelMissing, isOllamaUnreachable, PipelineError } from './errors.js';
+import { stripTaxaliaOptionsBlocks } from './options.js';
 import type { ColdStartGate } from './coldStart.js';
 import type { OllamaClient } from '../ollama/interface.js';
 import type { Semaphore } from '../dispatch/semaphore.js';
@@ -431,7 +432,8 @@ async function* postStreamEvents(
       'single-agent path',
     );
     if (okResults.length > 0 && okResults[0].text) {
-      yield { delta: okResults[0].text };
+      const text = stripTaxaliaOptionsBlocks(okResults[0].text);
+      if (text.length > 0) yield { delta: text };
     } else if (allFailed) {
       yield { delta: WARNINGS[lang].allFailed };
     }
@@ -507,13 +509,14 @@ async function* postStreamEvents(
   for await (const chunk of synthStream) {
     synthText += chunk;
     synthChunks += 1;
-    yield { delta: chunk };
   }
+  const visibleSynthText = stripTaxaliaOptionsBlocks(synthText);
+  if (visibleSynthText.length > 0) yield { delta: visibleSynthText };
   logger.info(
     {
       stage: 'stream',
       synthMs: Math.round(performance.now() - synthStart),
-      synthChars: synthText.length,
+      synthChars: visibleSynthText.length,
       synthChunks,
     },
     'synthesizer stream complete',
@@ -521,14 +524,16 @@ async function* postStreamEvents(
 
   // If the synth stream produced no text, fall back to the per-agent
   // text directly so the client always gets something.
-  if (synthText.length === 0 && okResults.length > 0) {
+  if (visibleSynthText.length === 0 && okResults.length > 0) {
     logger.warn(
       { stage: 'stream', path: 'synth-empty-fallback', okCount: okResults.length },
       'synthesizer produced no text; falling back to agent outputs',
     );
     for (const r of okResults) {
       if (r.text) {
-        yield { delta: r.text };
+        const text = stripTaxaliaOptionsBlocks(r.text);
+        if (text.length === 0) continue;
+        yield { delta: text };
         yield { delta: '\n' };
       }
     }
