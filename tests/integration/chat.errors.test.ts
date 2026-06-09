@@ -13,6 +13,12 @@ const ENV: Env = {
   CORS_ALLOWED_ORIGINS: 'http://localhost:4321,http://localhost:4322',
   LOG_LEVEL: 'silent',
   DISPATCH_CONCURRENCY_CAP: 2,
+  BLOG_DB_PATH: ':memory:',
+  SKIP_OLLAMA_CHECK: false,
+  ADMIN_USERNAME: 'admin',
+  ADMIN_PASSWORD: 'change-me-now',
+  SESSION_TTL_HOURS: 12,
+  UPLOAD_DIR: './data/uploads',
 };
 
 const ALLOWLIST = ENV.CORS_ALLOWED_ORIGINS.split(',');

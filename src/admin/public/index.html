@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Taxalia · Panel de contenido</title>
+    <style>
+      :root {
+        --bg: #f8f4ef; --surface: #fff; --ink: #2b2522; --muted: #93867d;
+        --primary: #4c362d; --accent: #c8a15a; --border: rgba(76, 54, 45, 0.16);
+        --danger: #8b3f35;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: var(--bg); color: var(--ink);
+      }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.9rem 1.5rem; background: var(--primary); color: #fff;
+      }
+      header b { letter-spacing: 0.08em; text-transform: uppercase; }
+      main { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+      button {
+        font: inherit; cursor: pointer; border: 0; border-radius: 999px;
+        padding: 0.5rem 1rem; background: var(--primary); color: #fff;
+      }
+      button.ghost { background: transparent; color: var(--primary); border: 1px solid var(--border); }
+      button.danger { background: var(--danger); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      input, select {
+        font: inherit; width: 100%; padding: 0.55rem 0.7rem;
+        border: 1px solid var(--border); border-radius: 0.5rem; background: #fff;
+      }
+      label { display: block; font-size: 0.8rem; font-weight: 700; margin: 0.8rem 0 0.25rem; color: var(--primary); }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 0.6rem; overflow: hidden; }
+      th, td { text-align: left; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+      th { background: #efe7dc; }
+      .pill { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; background: #efe7dc; }
+      .pill.draft { background: #f3e0c8; color: #7a5b1e; }
+      .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
+      .card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.8rem; padding: 1.25rem; }
+      .login { max-width: 360px; margin: 4rem auto; }
+      .msg { padding: 0.6rem 0.8rem; border-radius: 0.5rem; margin: 0.5rem 0; font-size: 0.85rem; }
+      .msg.err { background: rgba(139,63,53,0.1); color: var(--danger); }
+      .msg.ok { background: rgba(73,107,85,0.12); color: #2f5a40; }
+      .actions { display: flex; gap: 0.4rem; }
+      .uploader { display: flex; gap: 0.5rem; align-items: center; }
+      small { color: var(--muted); }
+      [hidden] { display: none !important; }
+
+      /* ---- Content editor ---- */
+      .content-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 0.4rem; }
+
+      #f-bodyMd {
+        width: 100%; min-height: 520px; padding: 0.85rem 0.9rem; resize: vertical;
+        border: 1px solid var(--border); border-radius: 0.6rem; background: #fff;
+        color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        line-height: 1.6;
+      }
+
+      .site-preview { margin-top: 1rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow: hidden; }
+      .site-preview > summary {
+        cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: #faf6f0;
+      }
+      #preview-frame { width: 100%; height: 420px; border: 0; background: var(--bg); display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>Taxalia · Contenido</b>
+      <button id="logout" class="ghost" hidden>Salir</button>
+    </header>
+    <main>
+      <!-- LOGIN -->
+      <section id="view-login" class="card login" hidden>
+        <h2>Acceso</h2>
+        <div id="login-msg"></div>
+        <label>Usuario</label>
+        <input id="login-user" autocomplete="username" />
+        <label>Contraseña</label>
+        <input id="login-pass" type="password" autocomplete="current-password" />
+        <div style="margin-top:1rem"><button id="login-btn">Entrar</button></div>
+      </section>
+
+      <!-- LIST -->
+      <section id="view-list" hidden>
+        <div class="toolbar">
+          <h2 style="margin:0">Artículos</h2>
+          <button id="new-btn">+ Nuevo artículo</button>
+        </div>
+        <table>
+          <thead><tr><th>Título</th><th>Idioma</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+          <tbody id="list-body"></tbody>
+        </table>
+      </section>
+
+      <!-- EDITOR -->
+      <section id="view-editor" class="card" hidden>
+        <div class="toolbar">
+          <h2 id="editor-title" style="margin:0">Nuevo artículo</h2>
+          <button class="ghost" id="back-btn">← Volver</button>
+        </div>
+        <div id="editor-msg"></div>
+        <input type="hidden" id="f-id" />
+        <div class="row">
+          <div><label>Título</label><input id="f-title" /></div>
+          <div><label>Slug (URL)</label><input id="f-slug" placeholder="mi-articulo" /></div>
+        </div>
+        <div class="row">
+          <div><label>Idioma</label><select id="f-lang"><option value="es">es</option><option value="en">en</option></select></div>
+          <div><label>Clave de traducción <small>(enlaza es/en)</small></label><input id="f-tkey" placeholder="mi-articulo" /></div>
+        </div>
+        <label>Descripción</label>
+        <input id="f-description" />
+        <div class="row">
+          <div><label>Autor</label><input id="f-author" value="Taxalia" /></div>
+          <div><label>Tags <small>(separados por coma)</small></label><input id="f-tags" /></div>
+        </div>
+        <div class="row">
+          <div><label>Fecha publicación</label><input id="f-pubDate" type="date" /></div>
+          <div><label>Fecha actualización <small>(opcional)</small></label><input id="f-updatedDate" type="date" /></div>
+        </div>
+        <label>Imagen de portada (URL)</label>
+        <div class="uploader">
+          <input id="f-heroImage" placeholder="/uploads/..." />
+          <button class="ghost" type="button" id="hero-upload">Subir</button>
+        </div>
+        <label>Texto alternativo de portada</label>
+        <input id="f-heroAlt" />
+        <label style="display:flex;align-items:center;gap:0.5rem;flex-direction:row;margin-top:1rem">
+          <input id="f-draft" type="checkbox" style="width:auto" /> Borrador (no se publica)
+        </label>
+
+        <!-- Content: rich text editor (WYSIWYG + Markdown toggle) -->
+        <div class="content-head">
+          <label style="margin:0">Contenido</label>
+        </div>
+        <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown."></textarea>
+
+        <details class="site-preview" open>
+          <summary>Vista previa · como se verá publicado en el sitio</summary>
+          <iframe id="preview-frame" title="Vista previa del sitio"></iframe>
+        </details>
+
+        <div style="margin-top:1rem;display:flex;gap:0.5rem">
+          <button id="save-btn">Guardar</button>
+          <button class="danger" id="delete-btn" hidden>Eliminar</button>
+        </div>
+      </section>
+    </main>
+
+    <input type="file" id="file-picker" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" hidden />
+    <script src="/admin/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,151 @@
+/* Preview styles for the admin editor. Mirrors the public article look
+   (frontend blog-post.css + clinica-premium tokens) so "what you see" in the
+   editor matches "what gets published". Loaded inside the preview iframe. */
+
+:root {
+  --color-bg: #f8f4ef;
+  --color-bg-soft: #fbf8f4;
+  --color-surface: #ffffff;
+  --color-primary: #8b6a3a;
+  --color-primary-dark: #4c362d;
+  --color-accent: #c8a15a;
+  --color-text: #2b2522;
+  --color-text-soft: #6f625b;
+  --color-text-muted: #93867d;
+  --color-border: rgba(76, 54, 45, 0.16);
+  --radius-lg: 1.75rem;
+  --shadow-sm: 0 8px 24px rgba(43, 37, 34, 0.08);
+  --shadow-md: 0 18px 46px rgba(43, 37, 34, 0.14);
+  --font-heading: Georgia, "Times New Roman", serif;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+.blog-post-detail__body {
+  width: min(100%, 760px);
+  margin-inline: auto;
+  font-size: 1.05rem;
+  line-height: 1.85;
+}
+
+.blog-post-detail__body > * + * { margin-top: 1.35rem; }
+
+.blog-post-detail__body h1,
+.blog-post-detail__body h2,
+.blog-post-detail__body h3,
+.blog-post-detail__body h4 {
+  color: var(--color-primary-dark);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.08;
+}
+.blog-post-detail__body h2 { margin-top: 2.5rem; font-size: clamp(1.8rem, 3vw, 2.6rem); }
+.blog-post-detail__body h3 { margin-top: 2rem; font-size: clamp(1.4rem, 2vw, 1.9rem); }
+.blog-post-detail__body p { margin: 0; }
+
+.blog-post-detail__body a {
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.blog-post-detail__body ul,
+.blog-post-detail__body ol { padding-left: 1.3rem; }
+.blog-post-detail__body li + li { margin-top: 0.55rem; }
+
+.blog-post-detail__body blockquote {
+  margin: 2rem 0;
+  padding: 1.5rem 1.75rem;
+  border-left: 4px solid var(--color-accent);
+  border-radius: 0 1rem 1rem 0;
+  background: var(--color-bg-soft);
+  color: var(--color-primary-dark);
+  font-family: var(--font-heading);
+  font-size: clamp(1.3rem, 2vw, 1.8rem);
+  line-height: 1.35;
+}
+
+.blog-post-detail__body img,
+.blog-post-detail__body video,
+.blog-post-detail__body iframe {
+  max-width: 100%;
+  border: 0;
+  border-radius: 1.1rem;
+}
+.blog-post-detail__body iframe { width: 100%; aspect-ratio: 16 / 9; }
+
+.blog-media { margin: 2.25rem 0; }
+.blog-media img,
+.blog-media video { width: 100%; box-shadow: var(--shadow-md); }
+.blog-media figcaption,
+.blog-video figcaption {
+  margin-top: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+.blog-media--wide { width: 100%; }
+.blog-media--left,
+.blog-media--right { width: min(48%, 320px); margin: 0.4rem 0 1rem; }
+.blog-media--left { float: left; margin-right: 1.5rem; }
+.blog-media--right { float: right; margin-left: 1.5rem; }
+.blog-media--portrait { max-width: 420px; margin-inline: auto; }
+
+.blog-video {
+  margin: 2.5rem 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.4rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.blog-video video,
+.blog-video iframe { width: 100%; aspect-ratio: 16 / 9; border-radius: 1rem; background: #000; }
+
+.blog-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 2.5rem 0;
+}
+.blog-gallery figure { margin: 0; }
+.blog-gallery img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.blog-callout {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.1rem;
+  background: linear-gradient(135deg, rgba(200, 161, 90, 0.14), transparent), var(--color-bg-soft);
+}
+
+.blog-post-detail__body::after { content: ""; display: block; clear: both; }
+
+.preview-empty {
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+  margin-top: 3rem;
+}
+
+@media (max-width: 640px) {
+  .blog-media--left,
+  .blog-media--right { float: none; width: 100%; margin-inline: 0; }
+  .blog-gallery { grid-template-columns: 1fr; }
+}
