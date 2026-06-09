@@ -58,15 +58,41 @@ async function loadList() {
   body.innerHTML = '';
   for (const p of data?.posts ?? []) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${escapeHtml(p.title)}</td>
-      <td><span class="pill">${p.lang}</span></td>
-      <td>${p.draft ? '<span class="pill draft">Borrador</span>' : '<span class="pill">Publicado</span>'}</td>
-      <td>${p.pubDate}</td>
-      <td class="actions">
-        <button class="ghost" data-edit="${p.id}">Editar</button>
-        <button class="danger" data-del="${p.id}">Borrar</button>
-      </td>`;
+    const titleCell = document.createElement('td');
+    titleCell.textContent = p.title;
+
+    const langCell = document.createElement('td');
+    const langPill = document.createElement('span');
+    langPill.className = 'pill';
+    langPill.textContent = p.lang;
+    langCell.appendChild(langPill);
+
+    const statusCell = document.createElement('td');
+    const statusPill = document.createElement('span');
+    statusPill.className = p.draft ? 'pill draft' : 'pill';
+    statusPill.textContent = p.draft ? 'Borrador' : 'Publicado';
+    statusCell.appendChild(statusPill);
+
+    const dateCell = document.createElement('td');
+    dateCell.textContent = p.pubDate;
+
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'ghost';
+    editBtn.type = 'button';
+    editBtn.dataset.edit = String(p.id);
+    editBtn.textContent = 'Editar';
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'danger';
+    deleteBtn.type = 'button';
+    deleteBtn.dataset.del = String(p.id);
+    deleteBtn.textContent = 'Borrar';
+
+    actionsCell.append(editBtn, deleteBtn);
+    tr.append(titleCell, langCell, statusCell, dateCell, actionsCell);
     body.appendChild(tr);
   }
   body.querySelectorAll('[data-edit]').forEach((b) =>
@@ -210,11 +236,6 @@ $('file-picker').addEventListener('change', async (e) => {
 function ytId(input) {
   const m = String(input).match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
   return m ? m[1] : String(input).trim();
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 checkSession();

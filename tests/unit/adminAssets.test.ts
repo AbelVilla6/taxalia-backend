@@ -8,10 +8,17 @@ const ADMIN_ASSETS = [
 ];
 
 describe('admin static assets', () => {
-  it('do not reference external https dependencies', () => {
+  it('do not reference external dependencies', () => {
     for (const asset of ADMIN_ASSETS) {
       const source = readFileSync(new URL(`../../${asset}`, import.meta.url), 'utf8');
-      expect(source).not.toContain('https://');
+      expect(source).not.toMatch(/['"`](?:https?:)?\/\/[^'"`\s]+/);
     }
+  });
+
+  it('renders admin pubDate cells with textContent', () => {
+    const source = readFileSync(new URL('../../src/admin/public/app.js', import.meta.url), 'utf8');
+
+    expect(source).toContain("dateCell.textContent = p.pubDate");
+    expect(source).not.toContain('<td>${p.pubDate}</td>');
   });
 });
