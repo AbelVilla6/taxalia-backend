@@ -15,6 +15,15 @@ const EnvSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
+  BLOG_DB_PATH: z.string().default('./data/blog.db'),
+  SKIP_OLLAMA_CHECK: z
+    .string()
+    .optional()
+    .transform((v) => v === '1' || v === 'true'),
+  ADMIN_USERNAME: z.string().default('admin'),
+  ADMIN_PASSWORD: z.string().default('change-me-now'),
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
+  UPLOAD_DIR: z.string().default('./data/uploads'),
 });
 
 export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST' | 'OLLAMA_MODEL'> & {

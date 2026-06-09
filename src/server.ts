@@ -1,10 +1,19 @@
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { handle } from '@hono/node-server/vercel';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
 import { buildChatRouter } from './chat/routes.js';
 import { createArtifactRegistry } from './loaders/registry.js';
+import { openBlogDb } from './content/db.js';
+import { PostRepository } from './content/repository.js';
+import { buildContentRouter } from './content/routes.js';
+import { seedIfEmpty } from './content/seed.js';
+import { AuthService } from './admin/auth.js';
+import { buildAdminRouter } from './admin/routes.js';
 import { createLogger, getDefaultLogger, type Logger } from './observability/logger.js';
 import { requestIdMiddleware } from './observability/requestId.js';
 import { createOllamaClient } from './ollama/client.js';
@@ -20,7 +29,11 @@ function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler
       return;
     }
 
-    if (origin && !allowlist.includes(origin)) {
+    // Same-origin requests (e.g. the backend-served /admin panel calling
+    // /api/admin) are always allowed regardless of the frontend allowlist.
+    const selfOrigin = new URL(c.req.url).origin;
+
+    if (origin && origin !== selfOrigin && !allowlist.includes(origin)) {
       logger.warn(
         {
           stage: 'cors',
@@ -79,7 +92,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     '*',
     cors({
       origin: allowlist,
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Accept', 'X-Request-Id', 'Authorization'],
       credentials: false,
     }),
@@ -142,6 +155,66 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     }),
   );
 
+  // Blog content store + public read API (/api/posts). Guarded so a missing or
+  // read-only filesystem (e.g. serverless) disables the blog API without
+  // taking down the chat backend.
+  try {
+    const db = openBlogDb(env.BLOG_DB_PATH);
+    const repo = new PostRepository(db);
+    const seeded = seedIfEmpty(repo);
+    logger.info(
+      { dbPath: env.BLOG_DB_PATH, seeded },
+      'blog content store ready',
+    );
+
+    // Public read API.
+    app.route('/api', buildContentRouter(repo));
+
+    // Admin: auth + write API + media, plus the panel UI it serves.
+    const auth = new AuthService(db, env.SESSION_TTL_HOURS * 3_600_000);
+    auth.ensureAdminUser(env.ADMIN_USERNAME, env.ADMIN_PASSWORD);
+    if (
+      process.env.NODE_ENV === 'production' &&
+      env.ADMIN_PASSWORD === 'change-me-now'
+    ) {
+      logger.warn('ADMIN_PASSWORD is the default value in production. Set a strong ADMIN_PASSWORD.');
+    }
+
+    app.route(
+      '/api/admin',
+      buildAdminRouter({
+        repo,
+        auth,
+        uploadDir: env.UPLOAD_DIR,
+        sessionTtlMs: env.SESSION_TTL_HOURS * 3_600_000,
+        cookieSecure: process.env.NODE_ENV === 'production',
+      }),
+    );
+
+    // Ensure the uploads dir exists so static serving doesn't warn on a fresh
+    // host before the first upload.
+    mkdirSync(resolve(env.UPLOAD_DIR), { recursive: true });
+
+    // Admin panel (static SPA + assets) + uploaded media.
+    app.get('/admin', serveStatic({ path: './src/admin/public/index.html' }));
+    app.use(
+      '/admin/*',
+      serveStatic({
+        root: './src/admin/public',
+        rewriteRequestPath: (p) => p.replace(/^\/admin/, ''),
+      }),
+    );
+    app.use(
+      '/uploads/*',
+      serveStatic({
+        root: env.UPLOAD_DIR,
+        rewriteRequestPath: (p) => p.replace(/^\/uploads/, ''),
+      }),
+    );
+  } catch (err) {
+    logger.error({ err }, 'blog content store unavailable; /api disabled');
+  }
+
   return app;
 }
 
@@ -173,8 +246,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (env.SKIP_OLLAMA_CHECK) {
+    logger.warn(
+      'SKIP_OLLAMA_CHECK is set: starting without Ollama. Chat will fail until Ollama is reachable; blog API is unaffected.',
+    );
+  }
+
   try {
-    await client.checkModel();
+    if (!env.SKIP_OLLAMA_CHECK) await client.checkModel();
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === 'MODEL_MISSING') {
