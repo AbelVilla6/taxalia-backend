@@ -1,7 +1,7 @@
 # Backend content + chat service.
 # better-sqlite3 is a native module; node-gyp build tools are included so it
 # compiles on any platform that lacks a prebuilt binary.
-FROM node:22-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 WORKDIR /app
 
 RUN apt-get update \

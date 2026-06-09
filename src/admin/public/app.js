@@ -78,43 +78,9 @@ async function loadList() {
 $('new-btn').addEventListener('click', () => openEditor(null));
 $('back-btn').addEventListener('click', async () => { await loadList(); show('list'); });
 
-// ---- Rich text editor (Toast UI: WYSIWYG + Markdown toggle) ----
-let editor = null;
+// ---- Markdown editor + live preview ----
+const bodyEditor = $('f-bodyMd');
 const frame = $('preview-frame');
-
-function initEditor() {
-  if (editor) return;
-  editor = new toastui.Editor({
-    el: $('tui-editor'),
-    height: '520px',
-    initialEditType: 'wysiwyg',
-    previewStyle: 'tab',
-    usageStatistics: false,
-    // Author-provided multimedia HTML (figure/iframe/video) is trusted in the
-    // editor; the backend sanitizes with its allowlist on preview and publish.
-    customHTMLSanitizer: (html) => html,
-    toolbarItems: [
-      ['heading', 'bold', 'italic', 'strike'],
-      ['hr', 'quote'],
-      ['ul', 'ol', 'task'],
-      ['table', 'link'],
-      ['code', 'codeblock'],
-      ['image'],
-    ],
-    hooks: {
-      // Native image button → upload to the backend, insert returned URL.
-      addImageBlobHook: async (blob, callback) => {
-        try {
-          const url = await uploadFile(blob);
-          callback(url, '');
-        } catch (err) {
-          msg($('editor-msg'), 'No se pudo subir la imagen (' + err.message + ').', 'err');
-        }
-      },
-    },
-    events: { change: schedulePreview },
-  });
-}
 
 function fillForm(p) {
   $('f-id').value = p?.id ?? '';
@@ -130,12 +96,11 @@ function fillForm(p) {
   $('f-heroImage').value = p?.heroImage ?? '';
   $('f-heroAlt').value = p?.heroAlt ?? '';
   $('f-draft').checked = !!p?.draft;
-  editor.setMarkdown(p?.bodyMd ?? '');
+  bodyEditor.value = p?.bodyMd ?? '';
 }
 
 async function openEditor(id) {
   msg($('editor-msg'), '', '');
-  initEditor();
   if (id == null) {
     $('editor-title').textContent = 'Nuevo artículo';
     $('delete-btn').hidden = true;
@@ -166,7 +131,7 @@ function collectForm() {
     heroImage: $('f-heroImage').value.trim() || null,
     heroAlt: $('f-heroAlt').value.trim() || null,
     draft: $('f-draft').checked,
-    bodyMd: editor.getMarkdown(),
+    bodyMd: bodyEditor.value,
   };
 }
 
@@ -201,8 +166,7 @@ function schedulePreview() {
   previewTimer = setTimeout(renderPreview, 400);
 }
 async function renderPreview() {
-  if (!editor) return;
-  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown: editor.getMarkdown() }) });
+  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown: bodyEditor.value }) });
   const html = data?.html || '<p class="preview-empty">Sin contenido todavía…</p>';
   frame.srcdoc =
     '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
@@ -212,10 +176,14 @@ async function renderPreview() {
     '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
 }
 
+bodyEditor.addEventListener('input', schedulePreview);
+
 // ---- Multimedia blocks (inserted as HTML; shown in Markdown mode) ----
 function insertHtmlBlock(snippet) {
-  if (!editor.isMarkdownMode()) editor.changeMode('markdown', true);
-  editor.insertText('\n' + snippet + '\n');
+  const start = bodyEditor.selectionStart ?? bodyEditor.value.length;
+  const end = bodyEditor.selectionEnd ?? bodyEditor.value.length;
+  bodyEditor.setRangeText('\n' + snippet + '\n', start, end, 'end');
+  bodyEditor.focus();
   schedulePreview();
 }
 

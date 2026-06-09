@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Hono } from 'hono';
 import { openBlogDb } from '../../src/content/db.js';
 import { PostRepository } from '../../src/content/repository.js';
@@ -10,12 +13,13 @@ function setup() {
   const repo = new PostRepository(db);
   const auth = new AuthService(db, 3_600_000);
   auth.ensureAdminUser('admin', 'secret123');
+  const uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
   const app = new Hono();
   app.route(
     '/api/admin',
-    buildAdminRouter({ repo, auth, uploadDir: ':mem-not-used:', sessionTtlMs: 3_600_000, cookieSecure: false }),
+    buildAdminRouter({ repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false }),
   );
-  return { app, repo };
+  return { app, repo, uploadDir };
 }
 
 async function login(app: Hono, password = 'secret123'): Promise<string | null> {
@@ -33,17 +37,36 @@ async function login(app: Hono, password = 'secret123'): Promise<string | null> 
 }
 
 function authed(token: string, path: string, init: RequestInit = {}): Request {
-  return new Request('http://x' + path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Cookie: `${SESSION_COOKIE}=${token}`, ...(init.headers ?? {}) },
-  });
+  const headers = new Headers(init.headers);
+  headers.set('Cookie', `${SESSION_COOKIE}=${token}`);
+  if (!headers.has('Content-Type') && init.body && typeof init.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+  return new Request('http://x' + path, { ...init, headers });
+}
+
+async function upload(app: Hono, token: string, file: File): Promise<Response> {
+  const body = new FormData();
+  body.append('file', file);
+  return app.fetch(
+    new Request('http://x/api/admin/media', {
+      method: 'POST',
+      headers: { Cookie: `${SESSION_COOKIE}=${token}` },
+      body,
+    }),
+  );
 }
 
 describe('admin API', () => {
   let app: Hono;
+  let uploadDir: string;
 
   beforeEach(() => {
-    ({ app } = setup());
+    ({ app, uploadDir } = setup());
+  });
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
   });
 
   it('rejects unauthenticated access', async () => {
@@ -97,5 +120,18 @@ describe('admin API', () => {
     });
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(201);
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(409);
+  });
+
+  it('rejects svg uploads and accepts allowed media', async () => {
+    const token = (await login(app))!;
+
+    const svg = await upload(app, token, new File(['<svg xmlns="http://www.w3.org/2000/svg"></svg>'], 'evil.svg', { type: 'image/svg+xml' }));
+    expect(svg.status).toBe(415);
+
+    const png = await upload(app, token, new File([new Uint8Array([137, 80, 78, 71])], 'image.png', { type: 'image/png' }));
+    expect(png.status).toBe(201);
+
+    const { url } = (await png.json()) as { url: string };
+    expect(url).toMatch(/^\/uploads\//);
   });
 });

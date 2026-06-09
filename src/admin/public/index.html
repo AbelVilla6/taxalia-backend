@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Taxalia · Panel de contenido</title>
-    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
     <style>
       :root {
         --bg: #f8f4ef; --surface: #fff; --ink: #2b2522; --muted: #93867d;
@@ -54,8 +53,13 @@
 
       /* ---- Content editor ---- */
       .content-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 0.4rem; }
-    
-      #tui-editor { background: #fff; }
+
+      #f-bodyMd {
+        width: 100%; min-height: 520px; padding: 0.85rem 0.9rem; resize: vertical;
+        border: 1px solid var(--border); border-radius: 0.6rem; background: #fff;
+        color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        line-height: 1.6;
+      }
 
       .site-preview { margin-top: 1rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow: hidden; }
       .site-preview > summary {
@@ -135,7 +139,7 @@
         <div class="content-head">
           <label style="margin:0">Contenido</label>
         </div>
-        <div id="tui-editor"></div>
+        <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown."></textarea>
 
         <details class="site-preview" open>
           <summary>Vista previa · como se verá publicado en el sitio</summary>
@@ -149,8 +153,7 @@
       </section>
     </main>
 
-    <input type="file" id="file-picker" accept="image/*,video/mp4" hidden />
-    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+    <input type="file" id="file-picker" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" hidden />
     <script src="/admin/app.js"></script>
   </body>
 </html>

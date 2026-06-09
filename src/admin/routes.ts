@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -30,7 +30,6 @@ const ALLOWED_UPLOAD_MIME: Record<string, string> = {
   'image/png': '.png',
   'image/webp': '.webp',
   'image/gif': '.gif',
-  'image/svg+xml': '.svg',
   'video/mp4': '.mp4',
 };
 
@@ -162,7 +161,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     }
 
     mkdirSync(resolve(uploadDir), { recursive: true });
-    const name = `${Date.now()}-${randomBytes(6).toString('hex')}${ext || extname(file.name)}`;
+    const name = `${Date.now()}-${randomBytes(6).toString('hex')}${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(join(resolve(uploadDir), name), buffer);
 
