@@ -170,8 +170,6 @@ async function renderPreview() {
   const html = data?.html || '<p class="preview-empty">Sin contenido todavía…</p>';
   frame.srcdoc =
     '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
-    '<link rel="preconnect" href="https://fonts.googleapis.com">' +
-    '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">' +
     '<link rel="stylesheet" href="/admin/preview.css"></head>' +
     '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
 }
