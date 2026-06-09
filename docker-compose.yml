@@ -1,0 +1,33 @@
+# Local approximation of the production topology:
+#   - the backend runs as a long-lived service (the "SQLite host")
+#   - the SQLite content DB lives on a named volume (persistent disk)
+#
+# Usage:
+#   docker compose up --build
+#   # blog API:  http://localhost:4324/api/posts?lang=es
+#
+# Ollama is not included: it runs on its own host. SKIP_OLLAMA_CHECK lets the
+# service boot and serve the blog without Ollama; chat will 5xx until OLLAMA_HOST
+# points at a reachable instance.
+services:
+  backend:
+    build: .
+    ports:
+      - "4324:4324"
+    environment:
+      PORT: "4324"
+      BLOG_DB_PATH: /app/data/blog.db
+      UPLOAD_DIR: /app/data/uploads
+      SKIP_OLLAMA_CHECK: "1"
+      CORS_ALLOWED_ORIGINS: "http://localhost:4321,http://localhost:4322,http://localhost:4399"
+      LOG_LEVEL: info
+      # Admin panel credentials (CHANGE THESE for any non-local use):
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me-now
+      # When you have an Ollama host, set these and drop SKIP_OLLAMA_CHECK:
+      # OLLAMA_HOST: "http://host.docker.internal:11434/api"
+    volumes:
+      - blog-data:/app/data
+
+volumes:
+  blog-data:
