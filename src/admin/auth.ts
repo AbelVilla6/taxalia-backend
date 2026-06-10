@@ -8,6 +8,12 @@ interface UserRow {
   username: string;
   password_hash: string;
   salt: string;
+  must_change_password: number;
+}
+
+export interface LoginResult {
+  token: string;
+  mustChangePassword: boolean;
 }
 
 function hashPassword(password: string, salt: string): string {
@@ -32,7 +38,10 @@ export class AuthService {
     private readonly sessionTtlMs: number,
   ) {}
 
-  /** Creates the admin user from env credentials if it does not exist yet. */
+  /**
+   * Creates the admin user from env credentials if it does not exist yet.
+   * Seeded accounts are flagged to force a password change on first login.
+   */
   ensureAdminUser(username: string, password: string): void {
     const existing = this.db
       .prepare('SELECT id FROM users WHERE username = ?')
@@ -42,13 +51,13 @@ export class AuthService {
     const salt = randomBytes(16).toString('hex');
     this.db
       .prepare(
-        'INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)',
+        'INSERT INTO users (username, password_hash, salt, must_change_password) VALUES (?, ?, ?, 1)',
       )
       .run(username, hashPassword(password, salt), salt);
   }
 
-  /** Verifies credentials and opens a session. Returns the token or null. */
-  login(username: string, password: string): string | null {
+  /** Verifies credentials and opens a session. Returns null on bad credentials. */
+  login(username: string, password: string): LoginResult | null {
     const user = this.db
       .prepare('SELECT * FROM users WHERE username = ?')
       .get(username) as UserRow | undefined;
@@ -60,7 +69,35 @@ export class AuthService {
     this.db
       .prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)')
       .run(token, user.id, expiresAt);
-    return token;
+    return { token, mustChangePassword: user.must_change_password === 1 };
+  }
+
+  /** Whether the user is still required to replace the seeded password. */
+  mustChangePassword(username: string): boolean {
+    const row = this.db
+      .prepare('SELECT must_change_password AS flag FROM users WHERE username = ?')
+      .get(username) as { flag: number } | undefined;
+    return row?.flag === 1;
+  }
+
+  /**
+   * Replaces the password after verifying the current one and clears the
+   * first-login flag. Returns false when the current password is wrong.
+   */
+  changePassword(username: string, currentPassword: string, newPassword: string): boolean {
+    const user = this.db
+      .prepare('SELECT * FROM users WHERE username = ?')
+      .get(username) as UserRow | undefined;
+    if (!user) return false;
+    if (!verifyPassword(currentPassword, user.salt, user.password_hash)) return false;
+
+    const salt = randomBytes(16).toString('hex');
+    this.db
+      .prepare(
+        'UPDATE users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE id = ?',
+      )
+      .run(hashPassword(newPassword, salt), salt, user.id);
+    return true;
   }
 
   /** Returns the username for a valid, unexpired session token, else null. */

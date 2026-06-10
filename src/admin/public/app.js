@@ -3,7 +3,12 @@
 const API = '/api/admin';
 const $ = (id) => document.getElementById(id);
 
-const views = { login: $('view-login'), list: $('view-list'), editor: $('view-editor') };
+const views = {
+  login: $('view-login'),
+  password: $('view-password'),
+  list: $('view-list'),
+  editor: $('view-editor'),
+};
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
   $('logout').hidden = name === 'login';
@@ -32,9 +37,16 @@ async function uploadFile(file) {
 }
 
 // ---- Auth ----
+async function enterPanel() {
+  await loadList();
+  show('list');
+}
+
 async function checkSession() {
-  const { ok } = await api('/me');
-  if (ok) { await loadList(); show('list'); } else { show('login'); }
+  const { ok, data } = await api('/me');
+  if (!ok) { show('login'); return; }
+  if (data?.mustChangePassword) { show('password'); return; }
+  await enterPanel();
 }
 
 $('login-btn').addEventListener('click', async () => {
@@ -42,8 +54,43 @@ $('login-btn').addEventListener('click', async () => {
   const username = $('login-user').value.trim();
   const password = $('login-pass').value;
   const { ok, data } = await api('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
-  if (ok) { $('login-pass').value = ''; await loadList(); show('list'); }
+  if (ok) {
+    $('login-pass').value = '';
+    if (data?.mustChangePassword) { show('password'); return; }
+    await enterPanel();
+  }
   else msg($('login-msg'), data?.error === 'INVALID_CREDENTIALS' ? 'Usuario o contraseña incorrectos.' : 'No se pudo iniciar sesión.', 'err');
+});
+
+$('password-btn').addEventListener('click', async () => {
+  msg($('password-msg'), '', '');
+  const currentPassword = $('pass-current').value;
+  const newPassword = $('pass-new').value;
+  const confirm = $('pass-confirm').value;
+  if (newPassword.length < 8) {
+    return msg($('password-msg'), 'La nueva contraseña debe tener al menos 8 caracteres.', 'err');
+  }
+  if (newPassword !== confirm) {
+    return msg($('password-msg'), 'Las contraseñas no coinciden.', 'err');
+  }
+  const { ok, data } = await api('/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (ok) {
+    $('pass-current').value = '';
+    $('pass-new').value = '';
+    $('pass-confirm').value = '';
+    await enterPanel();
+  } else {
+    msg(
+      $('password-msg'),
+      data?.error === 'INVALID_CREDENTIALS'
+        ? 'La contraseña actual no es correcta.'
+        : 'No se pudo cambiar la contraseña.',
+      'err',
+    );
+  }
 });
 
 $('logout').addEventListener('click', async () => {

@@ -80,10 +80,11 @@ export function openBlogDb(dbPath: string): BlogDatabase {
       ON translation_groups (published);
 
     CREATE TABLE IF NOT EXISTS users (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      username      TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      salt          TEXT NOT NULL
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      username             TEXT NOT NULL UNIQUE,
+      password_hash        TEXT NOT NULL,
+      salt                 TEXT NOT NULL,
+      must_change_password INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -108,6 +109,16 @@ export function ensureBlogSchema(db: BlogDatabase): void {
     if (!exists) {
       db.exec(`ALTER TABLE posts ADD COLUMN ${column} ${definition}`);
     }
+  }
+
+  // users may not exist yet (openBlogDb creates it after this runs on legacy
+  // fixtures); an empty PRAGMA result means there is nothing to migrate.
+  const userColumns = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
+  if (
+    userColumns.length > 0 &&
+    !userColumns.some((row) => row.name === 'must_change_password')
+  ) {
+    db.exec(`ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`);
   }
 
   db.exec(`

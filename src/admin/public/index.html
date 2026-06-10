@@ -86,6 +86,20 @@
         <div style="margin-top:1rem"><button id="login-btn">Entrar</button></div>
       </section>
 
+      <!-- FORCED PASSWORD CHANGE -->
+      <section id="view-password" class="card login" hidden>
+        <h2>Cambia tu contraseña</h2>
+        <p>Estás usando la contraseña inicial. Por seguridad, debes cambiarla antes de continuar.</p>
+        <div id="password-msg"></div>
+        <label>Contraseña actual</label>
+        <input id="pass-current" type="password" autocomplete="current-password" />
+        <label>Nueva contraseña (mínimo 8 caracteres)</label>
+        <input id="pass-new" type="password" autocomplete="new-password" />
+        <label>Repite la nueva contraseña</label>
+        <input id="pass-confirm" type="password" autocomplete="new-password" />
+        <div style="margin-top:1rem"><button id="password-btn">Guardar y continuar</button></div>
+      </section>
+
       <!-- LIST -->
       <section id="view-list" hidden>
         <div class="toolbar">

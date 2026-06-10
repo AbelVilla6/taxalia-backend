@@ -8,11 +8,16 @@ import { PostRepository } from '../../src/content/repository.js';
 import { AuthService } from '../../src/admin/auth.js';
 import { buildAdminRouter, SESSION_COOKIE } from '../../src/admin/routes.js';
 
-function setup() {
+function setup({ firstLoginDone = true } = {}) {
   const db = openBlogDb(':memory:');
   const repo = new PostRepository(db);
   const auth = new AuthService(db, 3_600_000);
   auth.ensureAdminUser('admin', 'secret123');
+  if (firstLoginDone) {
+    // Seeded admins must change their password; complete that step so the
+    // rest of the suite exercises a fully provisioned account.
+    auth.changePassword('admin', 'secret123', 'secret123');
+  }
   const uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
   const app = new Hono();
   app.route(
@@ -152,5 +157,88 @@ describe('admin API', () => {
 
     const { url } = (await png.json()) as { url: string };
     expect(url).toMatch(/^\/uploads\//);
+  });
+});
+
+describe('first-login password change', () => {
+  let app: Hono;
+  let uploadDir: string;
+
+  beforeEach(() => {
+    ({ app, uploadDir } = setup({ firstLoginDone: false }));
+  });
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  async function loginRaw(password: string): Promise<Response> {
+    return app.fetch(
+      new Request('http://x/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'admin', password }),
+      }),
+    );
+  }
+
+  it('reports mustChangePassword on first login', async () => {
+    const res = await loginRaw('secret123');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { mustChangePassword: boolean };
+    expect(body.mustChangePassword).toBe(true);
+  });
+
+  it('blocks content endpoints until the password is changed', async () => {
+    const token = (await login(app))!;
+
+    const posts = await app.fetch(authed(token, '/api/admin/posts'));
+    expect(posts.status).toBe(403);
+    const body = (await posts.json()) as { error: string };
+    expect(body.error).toBe('PASSWORD_CHANGE_REQUIRED');
+
+    const me = await app.fetch(authed(token, '/api/admin/me'));
+    expect(me.status).toBe(200);
+  });
+
+  it('changes the password, unblocks the panel, and invalidates the old one', async () => {
+    const token = (await login(app))!;
+
+    const change = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'secret123', newPassword: 'brand-new-pass-1' }),
+      }),
+    );
+    expect(change.status).toBe(200);
+
+    const posts = await app.fetch(authed(token, '/api/admin/posts'));
+    expect(posts.status).toBe(200);
+
+    expect((await loginRaw('secret123')).status).toBe(401);
+    const fresh = await loginRaw('brand-new-pass-1');
+    expect(fresh.status).toBe(200);
+    const body = (await fresh.json()) as { mustChangePassword: boolean };
+    expect(body.mustChangePassword).toBe(false);
+  });
+
+  it('rejects a wrong current password and a short new password', async () => {
+    const token = (await login(app))!;
+
+    const wrongCurrent = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'nope', newPassword: 'brand-new-pass-1' }),
+      }),
+    );
+    expect(wrongCurrent.status).toBe(401);
+
+    const weak = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'secret123', newPassword: 'short' }),
+      }),
+    );
+    expect(weak.status).toBe(400);
   });
 });

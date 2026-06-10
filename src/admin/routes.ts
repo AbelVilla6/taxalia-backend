@@ -25,6 +25,11 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
 const ALLOWED_UPLOAD_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -51,6 +56,15 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     await next();
   };
 
+  // Seeded credentials are placeholders: until they are replaced, the session
+  // can only be used to change the password (and check /me / log out).
+  const requireFreshPassword: MiddlewareHandler = async (c, next) => {
+    if (auth.mustChangePassword(c.get('username'))) {
+      return c.json({ error: 'PASSWORD_CHANGE_REQUIRED' }, 403);
+    }
+    await next();
+  };
+
   const app = new Hono();
 
   app.post('/login', async (c: Context) => {
@@ -59,19 +73,23 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
       return c.json({ error: 'INVALID_BODY' }, 400);
     }
 
-    const token = auth.login(parsed.data.username, parsed.data.password);
-    if (!token) {
+    const result = auth.login(parsed.data.username, parsed.data.password);
+    if (!result) {
       return c.json({ error: 'INVALID_CREDENTIALS' }, 401);
     }
 
-    setCookie(c, SESSION_COOKIE, token, {
+    setCookie(c, SESSION_COOKIE, result.token, {
       httpOnly: true,
       sameSite: 'Lax',
       secure: cookieSecure,
       path: '/',
       maxAge: Math.floor(sessionTtlMs / 1000),
     });
-    return c.json({ ok: true, username: parsed.data.username });
+    return c.json({
+      ok: true,
+      username: parsed.data.username,
+      mustChangePassword: result.mustChangePassword,
+    });
   });
 
   app.post('/logout', (c: Context) => {
@@ -81,29 +99,48 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
   });
 
   app.get('/me', requireAuth, (c: Context) => {
-    return c.json({ username: c.get('username') });
+    return c.json({
+      username: c.get('username'),
+      mustChangePassword: auth.mustChangePassword(c.get('username')),
+    });
+  });
+
+  app.post('/password', requireAuth, async (c: Context) => {
+    const parsed = ChangePasswordSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, 400);
+    }
+    const ok = auth.changePassword(
+      c.get('username'),
+      parsed.data.currentPassword,
+      parsed.data.newPassword,
+    );
+    if (!ok) {
+      return c.json({ error: 'INVALID_CREDENTIALS' }, 401);
+    }
+    return c.json({ ok: true });
   });
 
   // Live preview: renders Markdown with the exact same sanitizer used on
   // publish, so the editor preview matches the published article 1:1.
-  app.post('/preview', requireAuth, async (c: Context) => {
+  app.post('/preview', requireAuth, requireFreshPassword, async (c: Context) => {
     const body = (await c.req.json().catch(() => null)) as { markdown?: unknown } | null;
     const markdown = typeof body?.markdown === 'string' ? body.markdown : '';
     return c.json({ html: renderPostHtml(markdown).html });
   });
 
-  app.get('/posts', requireAuth, (c: Context) => {
+  app.get('/posts', requireAuth, requireFreshPassword, (c: Context) => {
     return c.json({ posts: repo.listAll() });
   });
 
-  app.get('/posts/:id', requireAuth, (c: Context) => {
+  app.get('/posts/:id', requireAuth, requireFreshPassword, (c: Context) => {
     const id = Number(c.req.param('id'));
     const post = repo.getById(id);
     if (!post) return c.json({ error: 'POST_NOT_FOUND' }, 404);
     return c.json({ post });
   });
 
-  app.post('/posts', requireAuth, async (c: Context) => {
+  app.post('/posts', requireAuth, requireFreshPassword, async (c: Context) => {
     const parsed = PostSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       return c.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, 400);
@@ -120,7 +157,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     }
   });
 
-  app.put('/posts/:id', requireAuth, async (c: Context) => {
+  app.put('/posts/:id', requireAuth, requireFreshPassword, async (c: Context) => {
     const id = Number(c.req.param('id'));
     const parsed = PostSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
@@ -138,14 +175,14 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     }
   });
 
-  app.delete('/posts/:id', requireAuth, (c: Context) => {
+  app.delete('/posts/:id', requireAuth, requireFreshPassword, (c: Context) => {
     const id = Number(c.req.param('id'));
     const ok = repo.removeById(id);
     if (!ok) return c.json({ error: 'POST_NOT_FOUND' }, 404);
     return c.json({ ok: true });
   });
 
-  app.post('/media', requireAuth, async (c: Context) => {
+  app.post('/media', requireAuth, requireFreshPassword, async (c: Context) => {
     const body = await c.req.parseBody();
     const file = body['file'];
     if (!(file instanceof File)) {
