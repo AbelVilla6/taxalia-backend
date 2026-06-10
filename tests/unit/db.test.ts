@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { ensureBlogSchema } from '../../src/content/db.js';
+import { ensureBlogSchema, openBlogDb } from '../../src/content/db.js';
 
-function createLegacyDb(): Database.Database {
-  const db = new Database(':memory:');
+function createLegacyDb(path = ':memory:'): Database.Database {
+  const db = new Database(path);
   db.exec(`
     CREATE TABLE posts (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +44,31 @@ function createLegacyDb(): Database.Database {
 
   return db;
 }
+
+describe('openBlogDb', () => {
+  it('opens a legacy database created before translation groups existed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'blog-db-'));
+    const path = join(dir, 'blog.db');
+    createLegacyDb(path).close();
+
+    try {
+      const db = openBlogDb(path);
+
+      const rows = db
+        .prepare('SELECT slug, translation_group_id FROM posts ORDER BY slug')
+        .all() as { slug: string; translation_group_id: string }[];
+
+      expect(rows).toEqual([
+        { slug: 'draft', translation_group_id: 'group-b' },
+        { slug: 'published', translation_group_id: 'group-a' },
+      ]);
+
+      db.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('ensureBlogSchema', () => {
   it('adds translation groups and backfills published groups conservatively', () => {

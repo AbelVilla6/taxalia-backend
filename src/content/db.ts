@@ -71,9 +71,6 @@ export function openBlogDb(dbPath: string): BlogDatabase {
     CREATE INDEX IF NOT EXISTS idx_posts_lang_pubdate
       ON posts (lang, draft, pub_date DESC);
 
-    CREATE INDEX IF NOT EXISTS idx_posts_translation_group_id
-      ON posts (translation_group_id);
-
     CREATE TABLE IF NOT EXISTS translation_groups (
       id TEXT PRIMARY KEY,
       published INTEGER NOT NULL DEFAULT 0
