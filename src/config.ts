@@ -37,6 +37,7 @@ const EnvSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
   UPLOAD_DIR: z.string().default('./data/uploads'),
   CALCOM_URL: z.string().url().default('https://cal.com/taxalia'),
+  FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
 });
 
 export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST' | 'OLLAMA_MODEL'> & {
