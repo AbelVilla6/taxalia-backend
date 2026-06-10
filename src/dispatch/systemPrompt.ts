@@ -51,10 +51,24 @@ const CONDUCT_HEADER: Record<Lang, string> = {
 };
 
 const BOOKING_SECTION: Record<Lang, (url: string) => string> = {
-  en: (url) =>
-    `## Booking\nIf you cannot confidently answer, or the user needs personalized review, offer to book a free consultation: ${url}. Also offer it when the user asks for an appointment.`,
-  es: (url) =>
-    `## Reserva\nSi no puedes responder con seguridad, o el usuario necesita una revisión personalizada, ofrece agendar una consulta gratuita: ${url}. Ofrécela también cuando el usuario pida una cita.`,
+  en: (url) => [
+    '## Booking',
+    'If you cannot confidently answer, or the user needs personalized review, or the user asks for an appointment, respond with a short sentence and then append exactly one `taxalia-booking-json` fenced block at the very end of your response.',
+    'Use this exact shape:',
+    '```taxalia-booking-json',
+    `{"url":"${url}","label":"Book a free consultation"}`,
+    '```',
+    'Do NOT include the raw URL as plain text. Do NOT include the block more than once.',
+  ].join('\n'),
+  es: (url) => [
+    '## Reserva',
+    'Si no puedes responder con seguridad, o el usuario necesita una revisión personalizada, o el usuario pide una cita, responde con una frase corta y luego añade exactamente un bloque `taxalia-booking-json` al final de tu respuesta.',
+    'Usa exactamente esta forma:',
+    '```taxalia-booking-json',
+    `{"url":"${url}","label":"Agendar consulta gratuita"}`,
+    '```',
+    'NO incluyas la URL como texto plano. NO incluyas el bloque más de una vez.',
+  ].join('\n'),
 };
 
 export class SystemPromptTooLargeError extends Error {
