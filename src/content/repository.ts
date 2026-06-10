@@ -36,6 +36,7 @@ interface PostRow {
   open_graph_title: string | null;
   open_graph_description: string | null;
   toc_json: string;
+  json_ld: string | null;
   group_published: number;
 }
 
@@ -63,6 +64,7 @@ export interface AdminPost {
   openGraphImage: string | null;
   openGraphTitle: string | null;
   openGraphDescription: string | null;
+  jsonLd: string | null;
 }
 
 function parseJsonArray<T>(value: string, fallback: T[] = []): T[] {
@@ -185,6 +187,7 @@ function toAdmin(row: PostRow): AdminPost {
     openGraphImage: row.open_graph_image,
     openGraphTitle: row.open_graph_title,
     openGraphDescription: row.open_graph_description,
+    jsonLd: row.json_ld,
   };
 }
 
@@ -219,12 +222,25 @@ function toPostDetail(row: PostRow, siteUrl: string, relatedRows: PostRow[]): Po
   const { html: contentHtml, toc } = renderPostHtml(row.body_md);
   const storedToc = rowToc(row);
 
+  let customJsonLd: Record<string, unknown> | null = null;
+  if (row.json_ld) {
+    try {
+      const parsed = JSON.parse(row.json_ld) as unknown;
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        customJsonLd = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Invalid stored JSON-LD is dropped from the public payload.
+    }
+  }
+
   return {
     ...toSummary(row),
     alternates,
     seo,
     toc: storedToc.length > 0 ? storedToc : toc,
     articleJsonLd: toJsonLd(row, seo),
+    customJsonLd,
     contentHtml,
   };
 }
@@ -255,6 +271,7 @@ function selectColumns(): string {
     p.open_graph_title,
     p.open_graph_description,
     p.toc_json,
+    p.json_ld,
     COALESCE(g.published, CASE WHEN p.draft = 0 THEN 1 ELSE 0 END) AS group_published
   `;
 }
@@ -286,6 +303,7 @@ function toParams(post: Post): Record<string, unknown> {
     openGraphTitle: post.openGraphTitle ?? null,
     openGraphDescription: post.openGraphDescription ?? null,
     tocJson: JSON.stringify(rendered.toc),
+    jsonLd: post.jsonLd || null,
   };
 }
 
@@ -351,12 +369,12 @@ export class PostRepository {
            (slug, lang, translation_group_id, translation_key, title, description, body_md, body_html,
             author, hero_image, hero_alt, tags, draft, pub_date, updated_date,
             meta_title, meta_description, focus_keyword, secondary_keywords,
-            open_graph_image, open_graph_title, open_graph_description, toc_json)
+            open_graph_image, open_graph_title, open_graph_description, toc_json, json_ld)
          VALUES
            (@slug, @lang, @translationGroupId, @translationKey, @title, @description, @bodyMd, @bodyHtml,
             @author, @heroImage, @heroAlt, @tags, @draft, @pubDate, @updatedDate,
             @metaTitle, @metaDescription, @focusKeyword, @secondaryKeywords,
-            @openGraphImage, @openGraphTitle, @openGraphDescription, @tocJson)
+            @openGraphImage, @openGraphTitle, @openGraphDescription, @tocJson, @jsonLd)
          ON CONFLICT (slug, lang) DO UPDATE SET
            translation_group_id = excluded.translation_group_id,
            translation_key = excluded.translation_key,
@@ -378,7 +396,8 @@ export class PostRepository {
            open_graph_image = excluded.open_graph_image,
            open_graph_title = excluded.open_graph_title,
            open_graph_description = excluded.open_graph_description,
-           toc_json = excluded.toc_json`,
+           toc_json = excluded.toc_json,
+           json_ld = excluded.json_ld`,
       )
       .run(toParams(post));
 
@@ -423,12 +442,12 @@ export class PostRepository {
            (slug, lang, translation_group_id, translation_key, title, description, body_md, body_html,
             author, hero_image, hero_alt, tags, draft, pub_date, updated_date,
             meta_title, meta_description, focus_keyword, secondary_keywords,
-            open_graph_image, open_graph_title, open_graph_description, toc_json)
+            open_graph_image, open_graph_title, open_graph_description, toc_json, json_ld)
          VALUES
            (@slug, @lang, @translationGroupId, @translationKey, @title, @description, @bodyMd, @bodyHtml,
             @author, @heroImage, @heroAlt, @tags, @draft, @pubDate, @updatedDate,
             @metaTitle, @metaDescription, @focusKeyword, @secondaryKeywords,
-            @openGraphImage, @openGraphTitle, @openGraphDescription, @tocJson)`,
+            @openGraphImage, @openGraphTitle, @openGraphDescription, @tocJson, @jsonLd)`,
       )
       .run(toParams(post));
 
@@ -453,7 +472,8 @@ export class PostRepository {
            meta_title = @metaTitle, meta_description = @metaDescription,
            focus_keyword = @focusKeyword, secondary_keywords = @secondaryKeywords,
            open_graph_image = @openGraphImage, open_graph_title = @openGraphTitle,
-           open_graph_description = @openGraphDescription, toc_json = @tocJson
+           open_graph_description = @openGraphDescription, toc_json = @tocJson,
+           json_ld = @jsonLd
          WHERE id = @id`,
       )
       .run({ ...toParams(post), id });

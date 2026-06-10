@@ -14,6 +14,7 @@ const POST_COLUMNS = [
   ['open_graph_title', 'TEXT'],
   ['open_graph_description', 'TEXT'],
   ['toc_json', "TEXT NOT NULL DEFAULT '[]'"],
+  ['json_ld', 'TEXT'],
 ] as const;
 
 /**

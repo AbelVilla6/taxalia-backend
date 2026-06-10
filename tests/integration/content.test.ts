@@ -188,4 +188,59 @@ describe('content API', () => {
     const detail = await app.fetch(new Request('http://x/api/posts/hidden-en?lang=en'));
     expect(detail.status).toBe(404);
   });
+
+  it('exposes stored custom JSON-LD alongside the generated Article JSON-LD', async () => {
+    const repo = new PostRepository(openBlogDb(':memory:'));
+    const faqJsonLd = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      inLanguage: 'es',
+      mainEntity: [],
+    });
+    repo.upsert({
+      slug: 'faq-es',
+      lang: 'es',
+      translationGroupId: 'faq-group',
+      title: 'FAQ ES',
+      description: 'desc',
+      bodyMd: '## Una sección',
+      author: 'Taxalia',
+      heroImage: null,
+      heroAlt: null,
+      tags: [],
+      draft: false,
+      pubDate: '2026-06-10',
+      updatedDate: null,
+      metaTitle: null,
+      metaDescription: null,
+      focusKeyword: null,
+      secondaryKeywords: [],
+      openGraphImage: null,
+      openGraphTitle: null,
+      openGraphDescription: null,
+      jsonLd: faqJsonLd,
+    });
+
+    const app = new Hono();
+    app.route('/api', buildContentRouter(repo));
+
+    const res = await app.fetch(new Request('http://x/api/posts/faq-es?lang=es'));
+    expect(res.status).toBe(200);
+    const { post } = (await res.json()) as {
+      post: {
+        articleJsonLd: Record<string, unknown>;
+        customJsonLd: Record<string, unknown> | null;
+      };
+    };
+    expect(post.articleJsonLd['@type']).toBe('Article');
+    expect(post.customJsonLd?.['@type']).toBe('FAQPage');
+  });
+
+  it('returns null custom JSON-LD when none is stored', async () => {
+    const res = await app.fetch(
+      new Request('http://x/api/posts/business-valuation-101?lang=en'),
+    );
+    const { post } = (await res.json()) as { post: { customJsonLd: unknown } };
+    expect(post.customJsonLd).toBeNull();
+  });
 });

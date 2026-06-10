@@ -73,6 +73,22 @@ export const PostSchema = z.object({
   openGraphImage: z.string().optional().nullable(),
   openGraphTitle: z.string().optional().nullable(),
   openGraphDescription: z.string().optional().nullable(),
+  jsonLd: z
+    .string()
+    .optional()
+    .nullable()
+    .refine(
+      (value) => {
+        if (value == null || value === '') return true;
+        try {
+          const parsed = JSON.parse(value) as unknown;
+          return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+        } catch {
+          return false;
+        }
+      },
+      { message: 'jsonLd must be a JSON object' },
+    ),
 });
 
 export type Post = z.infer<typeof PostSchema>;
@@ -99,5 +115,7 @@ export interface PostDetail extends PostSummary {
   seo: SeoData;
   toc: TocEntry[];
   articleJsonLd: ArticleJsonLd;
+  /** Hand-curated JSON-LD (e.g. FAQPage) stored with the post, if any. */
+  customJsonLd: Record<string, unknown> | null;
   contentHtml: string;
 }
