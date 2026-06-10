@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Taxalia · Panel de contenido</title>
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
     <style>
       :root {
         --bg: #f8f4ef; --surface: #fff; --ink: #2b2522; --muted: #93867d;
@@ -76,6 +77,49 @@
         color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         line-height: 1.6;
       }
+
+      /* ---- WYSIWYG (Toast UI) — Taxalia skin ---- */
+      #editor-mount { margin-top: 0.2rem; }
+      .toastui-editor-defaultUI {
+        border: 1px solid var(--border) !important;
+        border-radius: 0.6rem !important;
+        overflow: hidden;
+        font-family: inherit !important;
+      }
+      .toastui-editor-toolbar { height: auto !important; }
+      .toastui-editor-defaultUI-toolbar {
+        background: #faf6f0 !important;
+        border-bottom: 1px solid var(--border) !important;
+      }
+      .toastui-editor-defaultUI-toolbar button:hover,
+      .toastui-editor-defaultUI-toolbar button.active {
+        background: rgba(200, 161, 90, 0.15) !important;
+      }
+      .toastui-editor-contents,
+      .toastui-editor .ProseMirror {
+        font-family: inherit !important;
+        font-size: 0.95rem !important;
+        color: var(--ink) !important;
+        line-height: 1.65 !important;
+      }
+      .toastui-editor-contents h1, .toastui-editor-contents h2,
+      .toastui-editor-contents h3 { color: var(--primary) !important; }
+      .toastui-editor-contents blockquote {
+        border-left-color: var(--accent) !important;
+        background: rgba(200, 161, 90, 0.1) !important;
+      }
+      .toastui-editor-md-preview { background: #faf6f0 !important; font-family: inherit !important; }
+      .toastui-editor-tabs .tab-item { font-family: inherit !important; color: var(--muted) !important; }
+      .toastui-editor-tabs .tab-item.active { color: var(--primary) !important; font-weight: 700 !important; }
+      .toastui-editor-mode-switch { font-family: inherit !important; }
+      .toastui-editor-ok-button { background: var(--primary) !important; border: 0 !important; }
+      .tui-media-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px;
+        background: transparent; cursor: pointer; color: #444;
+      }
+      .tui-media-btn:hover { background: rgba(76, 54, 45, 0.1); color: var(--primary); }
+      .tui-media-btn svg { display: block; }
 
       .site-preview { margin-top: 1rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow: hidden; }
       .site-preview > summary {
@@ -179,6 +223,7 @@
           </div>
         </div>
         <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown, o pega un documento completo (con frontmatter y JSON-LD) y pulsa «Procesar texto pegado»."></textarea>
+        <div id="editor-mount" hidden></div>
 
         <label>JSON-LD personalizado <small>(opcional; p. ej. FAQPage. Se publica junto al Article generado)</small></label>
         <textarea id="f-jsonld" spellcheck="false" placeholder='{"@context": "...", "@type": "FAQPage", "mainEntity": [...]}'></textarea>
@@ -196,6 +241,7 @@
     </main>
 
     <input type="file" id="file-picker" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" hidden />
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
     <script src="/admin/app.js"></script>
   </body>
 </html>

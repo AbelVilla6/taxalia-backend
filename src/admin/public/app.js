@@ -168,6 +168,94 @@ const ed = {
 const bodyEditor = $('f-bodyMd');
 const frame = $('preview-frame');
 
+// ---- WYSIWYG (Toast UI) ----
+// The hidden #f-bodyMd textarea stays the single source of truth that all the
+// bilingual-editor logic reads and writes. Toast UI mirrors it: editor changes
+// sync into the textarea, and programmatic writes go through setBody().
+let tui = null;
+
+function setBody(md) {
+  bodyEditor.value = md;
+  if (tui) tui.setMarkdown(md, false);
+}
+
+function makeMediaBtn(title, svgPath, onClick) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.title = title;
+  btn.className = 'tui-media-btn';
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>`;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function ensureEditor() {
+  if (tui) return;
+  if (typeof toastui === 'undefined') return; // CDN failed → keep the textarea
+
+  const btnFigure = makeMediaBtn(
+    'Insertar figura (imagen + pie de foto)',
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    () => { uploadTarget = 'wide'; $('file-picker').click(); },
+  );
+  const btnVideo = makeMediaBtn(
+    'Subir vídeo (MP4)',
+    '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+    () => { uploadTarget = 'video'; $('file-picker').click(); },
+  );
+  const btnYoutube = makeMediaBtn(
+    'Insertar vídeo de YouTube',
+    '<path d="M22.54 6.42A2.78 2.78 0 0 0 20.6 4.47C18.88 4 12 4 12 4s-6.88 0-8.6.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.4 19.53C5.12 20 12 20 12 20s6.88 0 8.6-.47a2.78 2.78 0 0 0 1.94-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>',
+    insertYouTube,
+  );
+
+  tui = new toastui.Editor({
+    el: $('editor-mount'),
+    height: '560px',
+    initialEditType: 'wysiwyg',
+    previewStyle: 'tab',
+    usageStatistics: false,
+    initialValue: bodyEditor.value,
+    toolbarItems: [
+      ['heading', 'bold', 'italic', 'strike'],
+      ['hr', 'quote'],
+      ['ul', 'ol'],
+      ['table', 'image', 'link'],
+      ['code', 'codeblock'],
+      [{ el: btnFigure }, { el: btnVideo }, { el: btnYoutube }],
+    ],
+    hooks: {
+      addImageBlobHook: async (blob, callback) => {
+        try {
+          const url = await uploadFile(blob);
+          callback(url, blob.name ?? 'imagen');
+          msg($('editor-msg'), 'Imagen subida: ' + url, 'ok');
+        } catch (err) {
+          msg($('editor-msg'), 'No se pudo subir la imagen (' + err.message + ').', 'err');
+        }
+      },
+    },
+  });
+
+  tui.on('change', () => {
+    bodyEditor.value = tui.getMarkdown();
+    schedulePreview();
+  });
+
+  $('editor-mount').hidden = false;
+  bodyEditor.hidden = true;
+}
+
+function insertYouTube() {
+  const input = window.prompt('URL de YouTube (ej: https://youtu.be/xxxxx):');
+  if (!input) return;
+  const id = ytId(input);
+  if (!id) return msg($('editor-msg'), 'No se pudo identificar el ID del vídeo de YouTube.', 'err');
+  insertHtmlBlock(
+    `<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="https://www.youtube-nocookie.com/embed/${id}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption></figcaption>\n</figure>`,
+  );
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -222,7 +310,7 @@ function writeForm(f) {
   $('f-heroImage').value = f.heroImage ?? '';
   $('f-heroAlt').value = f.heroAlt ?? '';
   $('f-draft').checked = !!f.draft;
-  bodyEditor.value = f.bodyMd;
+  setBody(f.bodyMd);
   $('f-jsonld').value = f.jsonLd ?? '';
 }
 
@@ -300,6 +388,10 @@ async function openEditor(id) {
   }
   renderTabs();
   show('editor');
+  // Mount Toast UI after the section is visible (layout needs real dimensions)
+  // and sync it with whatever writeForm put in the textarea.
+  ensureEditor();
+  if (tui) tui.setMarkdown(bodyEditor.value, false);
   renderPreview();
 }
 
@@ -473,7 +565,7 @@ $('process-btn').addEventListener('click', () => {
   if (fields.draft) $('f-draft').checked = fields.draft === 'true';
   if (tags && tags.length) $('f-tags').value = tags.join(', ');
   if (jsonLd) $('f-jsonld').value = jsonLd;
-  bodyEditor.value = body;
+  setBody(body);
 
   const declaredLang = (fields.language || fields.lang || '').toLowerCase();
   if (declaredLang && declaredLang !== ed.activeLang) {
@@ -567,14 +659,20 @@ bodyEditor.addEventListener('input', schedulePreview);
 
 // ---- Multimedia blocks (inserted as HTML; shown in Markdown mode) ----
 function insertHtmlBlock(snippet) {
-  const start = bodyEditor.selectionStart ?? bodyEditor.value.length;
-  const end = bodyEditor.selectionEnd ?? bodyEditor.value.length;
-  bodyEditor.setRangeText('\n' + snippet + '\n', start, end, 'end');
-  bodyEditor.focus();
+  if (tui) {
+    tui.insertText('\n' + snippet + '\n');
+    bodyEditor.value = tui.getMarkdown();
+    tui.focus();
+  } else {
+    const start = bodyEditor.selectionStart ?? bodyEditor.value.length;
+    const end = bodyEditor.selectionEnd ?? bodyEditor.value.length;
+    bodyEditor.setRangeText('\n' + snippet + '\n', start, end, 'end');
+    bodyEditor.focus();
+  }
   schedulePreview();
 }
 
-let uploadTarget = null; // 'hero' | 'wide' | 'right'
+let uploadTarget = null; // 'hero' | 'wide' | 'right' | 'video'
 
 $('hero-upload').addEventListener('click', () => { uploadTarget = 'hero'; $('file-picker').click(); });
 
@@ -589,6 +687,8 @@ $('file-picker').addEventListener('change', async (e) => {
 
   if (uploadTarget === 'hero') {
     $('f-heroImage').value = url;
+  } else if (uploadTarget === 'video') {
+    insertHtmlBlock(`<figure class="blog-media blog-media--wide">\n  <video controls preload="metadata" class="blog-media-video">\n    <source src="${url}" type="${file.type}">\n  </video>\n  <figcaption></figcaption>\n</figure>`);
   } else {
     const cls = uploadTarget === 'right' ? 'blog-media blog-media--right' : 'blog-media blog-media--wide';
     insertHtmlBlock(`<figure class="${cls}">\n  <img src="${url}" alt="" loading="lazy">\n  <figcaption></figcaption>\n</figure>`);
