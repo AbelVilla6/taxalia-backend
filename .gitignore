@@ -1,3 +1,7 @@
+# local dotfiles/directories (keep this file tracked)
+.*
+!.gitignore
+
 # dependencies
 node_modules/
 
