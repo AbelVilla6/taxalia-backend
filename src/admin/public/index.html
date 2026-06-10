@@ -291,6 +291,57 @@
         border-top: 1px solid var(--border);
       }
 
+      /* ── Editor tabs (Write / Preview) ────────────── */
+      .editor-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--border);
+        margin-bottom: -2px;
+        position: relative;
+        z-index: 1;
+      }
+      .editor-tab {
+        padding: 0.55rem 1.25rem;
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        margin-bottom: -2px;
+        color: var(--muted);
+        cursor: pointer;
+        transition: color 0.15s, border-color 0.15s;
+      }
+      .editor-tab:hover { color: var(--primary); }
+      .editor-tab.active {
+        color: var(--primary);
+        border-bottom-color: var(--accent);
+        font-weight: 800;
+      }
+      .editor-tab:hover:not(:disabled) { filter: none; box-shadow: none; transform: none; }
+
+      .editor-preview-pane {
+        min-height: 520px;
+        border: 1.5px solid var(--border);
+        border-radius: 0 var(--radius) var(--radius) var(--radius);
+        background: var(--surface-soft);
+        padding: 1.5rem 1.75rem;
+        font-size: 0.9375rem;
+        line-height: 1.75;
+        color: var(--ink);
+        overflow-y: auto;
+      }
+      .editor-preview-pane.is-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 0.875rem;
+      }
+
       /* ── Custom toolbar buttons ────────────────────── */
       .tui-media-btn {
         display: inline-flex;
@@ -515,7 +566,12 @@
 
         <!-- WYSIWYG content editor -->
         <p class="section-label">Contenido del artículo</p>
-        <div id="editor-mount" style="min-height:520px;"></div>
+        <div class="editor-tabs">
+          <button type="button" class="editor-tab active" id="tab-write">✏️ Escribir</button>
+          <button type="button" class="editor-tab" id="tab-preview">👁 Vista previa</button>
+        </div>
+        <div id="editor-mount"></div>
+        <div id="editor-preview-pane" class="editor-preview-pane" hidden></div>
 
         <div class="editor-save-row">
           <button id="save-btn" class="accent">Guardar artículo</button>

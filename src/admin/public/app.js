@@ -199,6 +199,38 @@ function initEditor() {
   });
 }
 
+// ── Write / Preview tabs ──────────────────────────────────────────────────────
+const tabWrite   = $('tab-write');
+const tabPreview = $('tab-preview');
+const previewPane = $('editor-preview-pane');
+
+tabWrite.addEventListener('click', () => {
+  tabWrite.classList.add('active');
+  tabPreview.classList.remove('active');
+  $('editor-mount').hidden = false;
+  previewPane.hidden = true;
+});
+
+tabPreview.addEventListener('click', async () => {
+  tabPreview.classList.add('active');
+  tabWrite.classList.remove('active');
+  $('editor-mount').hidden = true;
+  previewPane.hidden = false;
+  previewPane.className = 'editor-preview-pane is-loading';
+  previewPane.textContent = 'Cargando vista previa…';
+
+  const markdown = editor ? editor.getMarkdown() : '';
+  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown }) });
+  const html = data?.html ?? '';
+
+  previewPane.className = 'editor-preview-pane';
+  if (html) {
+    previewPane.innerHTML = `<div class="blog-post-detail__body">${html}</div>`;
+  } else {
+    previewPane.innerHTML = '<p style="color:var(--muted);font-style:italic">Sin contenido todavía…</p>';
+  }
+});
+
 // ── File picker & upload targets ─────────────────────────────────────────────
 let uploadTarget = null; // 'hero' | 'figure' | 'video'
 
@@ -303,6 +335,12 @@ function collectForm() {
 // ── Editor open / save / delete ───────────────────────────────────────────────
 async function openEditor(id) {
   msg($('editor-msg'), '', '');
+  // Reset tabs to Write
+  tabWrite.classList.add('active');
+  tabPreview.classList.remove('active');
+  $('editor-mount').hidden = false;
+  previewPane.hidden = true;
+  previewPane.innerHTML = '';
   initEditor();
 
   if (id == null) {
