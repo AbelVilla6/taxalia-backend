@@ -154,6 +154,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
       semaphore,
       agentTimeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
       coldStart,
+      bookingUrl: env.CALCOM_URL,
       logger,
     }),
   );

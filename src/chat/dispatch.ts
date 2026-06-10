@@ -7,7 +7,6 @@ import type {
   SSEEvent,
 } from './schemas.js';
 import { isModelMissing, isOllamaUnreachable, PipelineError } from './errors.js';
-import { stripTaxaliaOptionsBlocks } from './options.js';
 import type { ColdStartGate } from './coldStart.js';
 import type { OllamaClient } from '../ollama/interface.js';
 import type { Semaphore } from '../dispatch/semaphore.js';
@@ -41,12 +40,20 @@ const WARNINGS: Record<
   },
 };
 
+/** Sentence appended to the noAgents warning when a booking URL is configured. */
+const BOOKING_SUFFIX: Record<'en' | 'es', (url: string) => string> = {
+  en: (url) => ` If you'd like, you can book a free consultation with our team: ${url}`,
+  es: (url) => ` Si lo prefieres, puedes reservar una consulta gratuita con nuestro equipo: ${url}`,
+};
+
 export type ChatRouteDeps = {
   client: OllamaClient;
   model?: string;
   semaphore: Semaphore;
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
+  /** Cal.com (or equivalent) booking URL injected into the system prompt. */
+  bookingUrl?: string;
   /**
    * Optional structured logger. When omitted the route falls back to
    * the process-wide default logger, which honors LOG_LEVEL and stays
@@ -72,6 +79,8 @@ export type PipelineRunOptions = {
   agentTimeoutMs: number;
   coldStart: ColdStartGate;
   registry: ArtifactRegistry;
+  /** Cal.com (or equivalent) booking URL injected into the system prompt. */
+  bookingUrl?: string;
   /**
    * Optional request-scoped logger (usually a child of the route
    * logger pre-bound with `{ requestId }`). When omitted the
@@ -116,6 +125,8 @@ type PreflightResult = {
   client: OllamaClient;
   signal: AbortSignal;
   logger: Logger;
+  /** Cal.com (or equivalent) booking URL, forwarded from PipelineRunOptions. */
+  bookingUrl?: string;
 };
 
 function hasAgentResponse(agentResults: AgentResult[]): boolean {
@@ -209,6 +220,7 @@ async function preflightPipeline(
     coldStart: opts.coldStart,
     logger,
     model,
+    bookingUrl: opts.bookingUrl,
   });
   const dispatchMs = Math.round(performance.now() - dispatchStart);
 
@@ -247,6 +259,7 @@ async function preflightPipeline(
     client: opts.client,
     signal,
     logger,
+    bookingUrl: opts.bookingUrl,
   };
 }
 
@@ -314,6 +327,7 @@ async function runDispatch(args: {
   coldStart: ColdStartGate;
   logger: Logger;
   model: string;
+  bookingUrl?: string;
 }): Promise<AgentResult[]> {
   const coldBudget = args.coldStart.takeColdBudgetMs();
   const perAgentTimeout = Math.max(args.agentTimeoutMs, coldBudget ?? 0);
@@ -339,6 +353,7 @@ async function runDispatch(args: {
       requestId: args.requestId,
       timeoutMs: perAgentTimeout,
       semaphore: args.semaphore,
+      bookingUrl: args.bookingUrl,
     });
   } catch (err) {
     if (isOllamaUnreachable(err)) {
@@ -393,6 +408,7 @@ async function* postStreamEvents(
     client,
     signal,
     logger,
+    bookingUrl,
   } = p;
   const agentResponse = hasAgentResponse(agentResults);
 
@@ -402,7 +418,8 @@ async function* postStreamEvents(
   // safety net: the user must never see a terminal `done` with
   // `agents: []` and no text.
   if (selectedAgents.length === 0) {
-    const message = WARNINGS[lang].noAgents;
+    const base = WARNINGS[lang].noAgents;
+    const message = bookingUrl ? base + BOOKING_SUFFIX[lang](bookingUrl) : base;
     logger.warn(
       { stage: 'stream', path: 'no-agents-selected', lang, messageChars: message.length },
       'no agents selected; emitting localized fallback to user',
@@ -432,7 +449,10 @@ async function* postStreamEvents(
       'single-agent path',
     );
     if (okResults.length > 0 && okResults[0].text) {
-      const text = stripTaxaliaOptionsBlocks(okResults[0].text);
+      // Pass the full agent text, including any taxalia-options-json fenced
+      // blocks, so the frontend can parse and render them as buttons.
+      // The frontend strips the fence from visible markdown itself.
+      const text = okResults[0].text;
       if (text.length > 0) yield { delta: text };
     } else if (allFailed) {
       yield { delta: WARNINGS[lang].allFailed };
@@ -510,13 +530,14 @@ async function* postStreamEvents(
     synthText += chunk;
     synthChunks += 1;
   }
-  const visibleSynthText = stripTaxaliaOptionsBlocks(synthText);
-  if (visibleSynthText.length > 0) yield { delta: visibleSynthText };
+  // Pass synthesizer output through unmodified so any taxalia-options-json
+  // fenced blocks reach the frontend for button rendering.
+  if (synthText.length > 0) yield { delta: synthText };
   logger.info(
     {
       stage: 'stream',
       synthMs: Math.round(performance.now() - synthStart),
-      synthChars: visibleSynthText.length,
+      synthChars: synthText.length,
       synthChunks,
     },
     'synthesizer stream complete',
@@ -524,16 +545,16 @@ async function* postStreamEvents(
 
   // If the synth stream produced no text, fall back to the per-agent
   // text directly so the client always gets something.
-  if (visibleSynthText.length === 0 && okResults.length > 0) {
+  if (synthText.length === 0 && okResults.length > 0) {
     logger.warn(
       { stage: 'stream', path: 'synth-empty-fallback', okCount: okResults.length },
       'synthesizer produced no text; falling back to agent outputs',
     );
     for (const r of okResults) {
       if (r.text) {
-        const text = stripTaxaliaOptionsBlocks(r.text);
-        if (text.length === 0) continue;
-        yield { delta: text };
+        // Pass agent text through unmodified (same reason as synth path).
+        if (r.text.length === 0) continue;
+        yield { delta: r.text };
         yield { delta: '\n' };
       }
     }

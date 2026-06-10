@@ -19,6 +19,8 @@ export type RunAgentsArgs = {
   requestId: string;
   timeoutMs: number;
   semaphore: Semaphore;
+  /** Cal.com (or equivalent) booking URL; when set, injected into the system prompt. */
+  bookingUrl?: string;
 };
 
 class AgentTimeoutSignal extends Error {
@@ -77,6 +79,7 @@ async function runOne(agent: AgentDef, args: RunAgentsArgs): Promise<AgentResult
       conducta: args.conducta,
       agent: { systemPrompt: agent.systemPrompt },
       skills: args.skills.map((s) => ({ id: s.id, description: s.description })),
+      bookingUrl: args.bookingUrl,
     });
 
     const history = structuredClone(args.history);

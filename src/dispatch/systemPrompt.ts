@@ -50,6 +50,13 @@ const CONDUCT_HEADER: Record<Lang, string> = {
   es: '## Políticas de conducta',
 };
 
+const BOOKING_SECTION: Record<Lang, (url: string) => string> = {
+  en: (url) =>
+    `## Booking\nIf you cannot confidently answer, or the user needs personalized review, offer to book a free consultation: ${url}. Also offer it when the user asks for an appointment.`,
+  es: (url) =>
+    `## Reserva\nSi no puedes responder con seguridad, o el usuario necesita una revisión personalizada, ofrece agendar una consulta gratuita: ${url}. Ofrécela también cuando el usuario pida una cita.`,
+};
+
 export class SystemPromptTooLargeError extends Error {
   constructor(public readonly tokenCount: number) {
     super(`System prompt is too large: ${tokenCount} tokens estimated, max ${MAX_SYSTEM_PROMPT_TOKENS}.`);
@@ -66,6 +73,7 @@ export function assembleSystemPrompt(input: {
   conducta: ConductDef[];
   agent: Pick<AgentDef, 'systemPrompt'>;
   skills: Array<Pick<SkillDef, 'id' | 'description'>>;
+  bookingUrl?: string;
 }): string {
   if (input.conducta.length < 5) {
     throw new Error(`Expected at least 5 conduct policies, found ${input.conducta.length}.`);
@@ -80,11 +88,16 @@ export function assembleSystemPrompt(input: {
     ? input.skills.map((skill) => `- ${skill.id}: ${skill.description}`).join('\n')
     : '(no skills available)';
 
+  const bookingSection = input.bookingUrl
+    ? BOOKING_SECTION[input.lang](input.bookingUrl)
+    : null;
+
   const sections = [
     BASE_IDENTITY[input.lang],
     `${CONDUCT_HEADER[input.lang]}\n${conductRules}`,
     input.agent.systemPrompt.trim(),
     `## Skills\n${skillLines}`,
+    bookingSection,
     RESPONSE_FORMAT[input.lang],
   ].filter(Boolean);
 
