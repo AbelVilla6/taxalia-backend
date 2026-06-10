@@ -197,39 +197,79 @@ function initEditor() {
       },
     },
   });
+
+  setupEditorTabs(mount);
 }
 
-// ── Write / Preview tabs ──────────────────────────────────────────────────────
-const tabWrite   = $('tab-write');
-const tabPreview = $('tab-preview');
-const previewPane = $('editor-preview-pane');
+// ── Write / Preview tabs (injected into the Toast UI toolbar) ────────────────
+// Toast UI only renders its native Write/Preview tabs in Markdown mode, so we
+// inject an identical tab bar into the toolbar for WYSIWYG mode. The preview
+// renders in an iframe to keep the published-article CSS (preview.css)
+// isolated from the admin page styles.
+function setupEditorTabs(root) {
+  const toolbar = root.querySelector('.toastui-editor-toolbar');
+  const buttonsRow = root.querySelector('.toastui-editor-defaultUI-toolbar');
+  const mainArea = root.querySelector('.toastui-editor-main');
+  if (!toolbar || !buttonsRow || !mainArea) return;
 
-tabWrite.addEventListener('click', () => {
-  tabWrite.classList.add('active');
-  tabPreview.classList.remove('active');
-  $('editor-mount').hidden = false;
-  previewPane.hidden = true;
-});
+  const container = document.createElement('div');
+  container.className = 'taxalia-tab-container';
 
-tabPreview.addEventListener('click', async () => {
-  tabPreview.classList.add('active');
-  tabWrite.classList.remove('active');
-  $('editor-mount').hidden = true;
-  previewPane.hidden = false;
-  previewPane.className = 'editor-preview-pane is-loading';
-  previewPane.textContent = 'Cargando vista previa…';
+  const tabs = document.createElement('div');
+  tabs.className = 'toastui-editor-tabs';
 
-  const markdown = editor ? editor.getMarkdown() : '';
-  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown }) });
-  const html = data?.html ?? '';
+  const tabWrite = document.createElement('div');
+  tabWrite.className = 'tab-item active';
+  tabWrite.textContent = 'Escribir';
 
-  previewPane.className = 'editor-preview-pane';
-  if (html) {
-    previewPane.innerHTML = `<div class="blog-post-detail__body">${html}</div>`;
-  } else {
-    previewPane.innerHTML = '<p style="color:var(--muted);font-style:italic">Sin contenido todavía…</p>';
-  }
-});
+  const tabPreview = document.createElement('div');
+  tabPreview.className = 'tab-item';
+  tabPreview.textContent = 'Vista previa';
+
+  tabs.append(tabWrite, tabPreview);
+  container.appendChild(tabs);
+  toolbar.insertBefore(container, toolbar.firstChild);
+
+  const frame = document.createElement('iframe');
+  frame.className = 'taxalia-preview-frame';
+  frame.title = 'Vista previa del artículo';
+  frame.hidden = true;
+  mainArea.insertAdjacentElement('afterend', frame);
+
+  const showWrite = () => {
+    tabWrite.classList.add('active');
+    tabPreview.classList.remove('active');
+    mainArea.style.display = '';
+    frame.hidden = true;
+    buttonsRow.classList.remove('is-preview-disabled');
+  };
+
+  const showPreview = async () => {
+    tabPreview.classList.add('active');
+    tabWrite.classList.remove('active');
+    frame.style.height = mainArea.offsetHeight + 'px';
+    mainArea.style.display = 'none';
+    frame.hidden = false;
+    buttonsRow.classList.add('is-preview-disabled');
+
+    const markdown = editor ? editor.getMarkdown() : '';
+    const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown }) });
+    const html = data?.html || '<p style="color:#93867d;font-style:italic">Sin contenido todavía…</p>';
+    frame.srcdoc =
+      '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+      '<link rel="stylesheet" href="/admin/preview.css"></head>' +
+      '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
+  };
+
+  tabWrite.addEventListener('click', showWrite);
+  tabPreview.addEventListener('click', showPreview);
+
+  // In Markdown mode Toast UI shows its own native tabs — hide ours.
+  editor.on('changeMode', (mode) => {
+    container.style.display = mode === 'markdown' ? 'none' : '';
+    showWrite();
+  });
+}
 
 // ── File picker & upload targets ─────────────────────────────────────────────
 let uploadTarget = null; // 'hero' | 'figure' | 'video'
@@ -335,12 +375,6 @@ function collectForm() {
 // ── Editor open / save / delete ───────────────────────────────────────────────
 async function openEditor(id) {
   msg($('editor-msg'), '', '');
-  // Reset tabs to Write
-  tabWrite.classList.add('active');
-  tabPreview.classList.remove('active');
-  $('editor-mount').hidden = false;
-  previewPane.hidden = true;
-  previewPane.innerHTML = '';
   initEditor();
 
   if (id == null) {
