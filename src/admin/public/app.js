@@ -113,7 +113,7 @@ function fillForm(p) {
   $('f-title').value = p?.title ?? '';
   $('f-slug').value = p?.slug ?? '';
   $('f-lang').value = p?.lang ?? 'es';
-  $('f-tkey').value = p?.translationKey ?? '';
+  $('f-tkey').value = p?.translationGroupId ?? '';
   $('f-description').value = p?.description ?? '';
   $('f-author').value = p?.author ?? 'Taxalia';
   $('f-tags').value = (p?.tags ?? []).join(', ');
@@ -148,7 +148,7 @@ function collectForm() {
     title: $('f-title').value.trim(),
     slug: $('f-slug').value.trim(),
     lang: $('f-lang').value,
-    translationKey: $('f-tkey').value.trim() || $('f-slug').value.trim(),
+    translationGroupId: $('f-tkey').value.trim() || $('f-slug').value.trim(),
     description: $('f-description').value.trim(),
     author: $('f-author').value.trim() || 'Taxalia',
     tags,

@@ -35,4 +35,8 @@ describe('loadConfig', () => {
       'custom-model',
     );
   });
+
+  it('defaults the frontend site URL for canonical links', () => {
+    expect(loadConfig({}).FRONTEND_SITE_URL).toBe('http://localhost:4321');
+  });
 });

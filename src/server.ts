@@ -160,7 +160,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   // taking down the chat backend.
   try {
     const db = openBlogDb(env.BLOG_DB_PATH);
-    const repo = new PostRepository(db);
+    const repo = new PostRepository(db, env.FRONTEND_SITE_URL);
     const seeded = seedIfEmpty(repo);
     logger.info(
       { dbPath: env.BLOG_DB_PATH, seeded },

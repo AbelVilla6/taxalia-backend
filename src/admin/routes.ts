@@ -89,7 +89,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
   app.post('/preview', requireAuth, async (c: Context) => {
     const body = (await c.req.json().catch(() => null)) as { markdown?: unknown } | null;
     const markdown = typeof body?.markdown === 'string' ? body.markdown : '';
-    return c.json({ html: renderPostHtml(markdown) });
+    return c.json({ html: renderPostHtml(markdown).html });
   });
 
   app.get('/posts', requireAuth, (c: Context) => {

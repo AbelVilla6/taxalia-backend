@@ -24,6 +24,7 @@ const EnvSchema = z.object({
   ADMIN_PASSWORD: z.string().default('change-me-now'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
   UPLOAD_DIR: z.string().default('./data/uploads'),
+  FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
 });
 
 export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST' | 'OLLAMA_MODEL'> & {

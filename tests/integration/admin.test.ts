@@ -83,7 +83,7 @@ describe('admin API', () => {
   it('creates, lists, updates and deletes a post', async () => {
     const token = (await login(app))!;
     const body = JSON.stringify({
-      title: 'Nuevo', slug: 'nuevo', lang: 'es', translationKey: 'nuevo',
+      title: 'Nuevo', slug: 'nuevo', lang: 'es', translationGroupId: 'nuevo',
       description: 'd', bodyMd: '# Hola', pubDate: '2026-01-01', draft: false,
     });
 
@@ -98,7 +98,7 @@ describe('admin API', () => {
       authed(token, `/api/admin/posts/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          title: 'Editado', slug: 'nuevo', lang: 'es', translationKey: 'nuevo',
+          title: 'Editado', slug: 'nuevo', lang: 'es', translationGroupId: 'nuevo',
           description: 'd', bodyMd: '# Hola', pubDate: '2026-01-01', draft: false,
         }),
       }),
@@ -115,11 +115,30 @@ describe('admin API', () => {
   it('409s on duplicate slug+lang', async () => {
     const token = (await login(app))!;
     const body = JSON.stringify({
-      title: 'A', slug: 'dup', lang: 'es', translationKey: 'dup',
+      title: 'A', slug: 'dup', lang: 'es', translationGroupId: 'dup',
       description: '', bodyMd: '', pubDate: '2026-01-01', draft: false,
     });
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(201);
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(409);
+  });
+
+  it('rejects posts without a translation group id', async () => {
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Missing group',
+          slug: 'missing-group',
+          lang: 'es',
+          description: '',
+          bodyMd: '',
+          pubDate: '2026-01-01',
+          draft: false,
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
   });
 
   it('rejects svg uploads and accepts allowed media', async () => {

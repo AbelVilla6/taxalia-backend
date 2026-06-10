@@ -19,6 +19,7 @@ const ENV: Env = {
   ADMIN_PASSWORD: 'change-me-now',
   SESSION_TTL_HOURS: 12,
   UPLOAD_DIR: './data/uploads',
+  FRONTEND_SITE_URL: 'http://localhost:4321',
 };
 
 const ALLOWLIST = ENV.CORS_ALLOWED_ORIGINS.split(',');
