@@ -59,9 +59,26 @@ export function parseMarkdownFrontmatter(filePath: string, source: string): {
     const [, key, rawValue] = match;
     if (rawValue === '|') {
       const block: string[] = [];
-      while (i + 1 < yaml.length && /^\s+/.test(yaml[i + 1])) {
-        i++;
-        block.push(yaml[i].replace(/^ {2}/, ''));
+      while (i + 1 < yaml.length) {
+        const next = yaml[i + 1];
+        if (/^\s+\S/.test(next)) {
+          i++;
+          block.push(next.replace(/^ {2}/, ''));
+          continue;
+        }
+        // Blank lines belong to the block only when indented content follows.
+        if (!next.trim()) {
+          let lookahead = i + 2;
+          while (lookahead < yaml.length && !yaml[lookahead].trim()) lookahead++;
+          if (lookahead < yaml.length && /^\s+\S/.test(yaml[lookahead])) {
+            while (i + 1 < lookahead) {
+              i++;
+              block.push('');
+            }
+            continue;
+          }
+        }
+        break;
       }
       frontmatter[key] = block.join('\n').trim();
       continue;

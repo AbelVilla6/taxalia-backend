@@ -33,6 +33,18 @@ describe('loaders', () => {
     expect(result.body).toBe('# Body');
   });
 
+  it('keeps blank lines inside literal block scalars', () => {
+    const source =
+      '---\nid: financial\nsystem_prompt: |\n  First paragraph.\n\n  ## Section\n\n  Second paragraph.\nname: Financial\n---\n# Body\n';
+
+    const result = parseMarkdownFrontmatter('financial.md', source);
+
+    expect(result.frontmatter.system_prompt).toBe(
+      'First paragraph.\n\n## Section\n\nSecond paragraph.',
+    );
+    expect(result.frontmatter.name).toBe('Financial');
+  });
+
   it('loads valid agent, skill, and conducta frontmatter', async () => {
     await write('agents', 'advisory.md', 'id: advisory\nname: Advisory\ndescription: Helps\nsystem_prompt: |\n  System prompt\ntools: [lookup-engagement-model]\ntags: [advisory]');
     await write('skills', 'lookup-engagement-model.md', 'id: lookup-engagement-model\nname: Lookup\ndescription: Finds engagement model');

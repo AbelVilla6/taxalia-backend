@@ -177,6 +177,7 @@ export function buildChatRouter(
         agentTimeoutMs: deps.agentTimeoutMs,
         coldStart: deps.coldStart,
         registry,
+        bookingUrl: deps.bookingUrl,
         logger: reqLogger,
       });
     } catch (err) {
