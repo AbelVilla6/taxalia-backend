@@ -160,6 +160,155 @@ describe('admin API', () => {
   });
 });
 
+describe('custom JSON-LD', () => {
+  let app: Hono;
+  let uploadDir: string;
+
+  beforeEach(() => {
+    ({ app, uploadDir } = setup());
+  });
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  const base = {
+    title: 'Con JSON-LD', slug: 'con-jsonld', lang: 'es', translationGroupId: 'con-jsonld',
+    description: 'd', bodyMd: '# Hola', pubDate: '2026-06-10', draft: true,
+  };
+
+  it('stores and returns a post custom JSON-LD', async () => {
+    const token = (await login(app))!;
+    const jsonLd = JSON.stringify({ '@context': 'https://schema.org', '@type': 'FAQPage' });
+
+    const created = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({ ...base, jsonLd }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: number };
+
+    const fetched = await app.fetch(authed(token, '/api/admin/posts/' + id));
+    const { post } = (await fetched.json()) as { post: { jsonLd: string | null } };
+    expect(JSON.parse(post.jsonLd!)['@type']).toBe('FAQPage');
+  });
+
+  it('rejects JSON-LD that is not a JSON object', async () => {
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({ ...base, jsonLd: 'not json at all' }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('editorial translation', () => {
+  let uploadDir: string;
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  function setupWithOllama(content: string | Error) {
+    const db = openBlogDb(':memory:');
+    const repo = new PostRepository(db);
+    const auth = new AuthService(db, 3_600_000);
+    auth.ensureAdminUser('admin', 'secret123');
+    auth.changePassword('admin', 'secret123', 'secret123');
+    uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
+    const calls: { system: string; user: string }[] = [];
+    const ollama = {
+      async chatOnce(args: { system: string; messages: { content: string }[] }) {
+        calls.push({ system: args.system, user: args.messages[0]?.content ?? '' });
+        if (content instanceof Error) throw content;
+        return { content };
+      },
+      chatStream: () => { throw new Error('not used'); },
+      checkModel: async () => {},
+    };
+    const app = new Hono();
+    app.route(
+      '/api/admin',
+      buildAdminRouter({
+        repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false,
+        ollama: ollama as never,
+      }),
+    );
+    return { app, calls };
+  }
+
+  const sourcePost = {
+    title: 'FBAR 2026: guía',
+    slug: 'fbar-2026-guia',
+    lang: 'es',
+    description: 'Guía sobre FBAR',
+    bodyMd: '## Qué es FBAR\n\nContenido.',
+    tags: ['FBAR', 'IRS'],
+    jsonLd: null,
+  };
+
+  it('translates a post via the Ollama skill and returns the proposed fields', async () => {
+    const translated = {
+      title: 'FBAR 2026: guide',
+      slug: 'fbar-2026-guide',
+      description: 'Guide about FBAR',
+      bodyMd: '## What is FBAR\n\nContent.',
+      tags: ['FBAR', 'IRS'],
+      jsonLd: '{"@context":"https://schema.org","@type":"FAQPage"}',
+    };
+    const { app, calls } = setupWithOllama(JSON.stringify(translated));
+    const token = (await login(app))!;
+
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { post: typeof translated & { lang: string } };
+    expect(body.post.lang).toBe('en');
+    expect(body.post.title).toBe('FBAR 2026: guide');
+    expect(JSON.parse(body.post.jsonLd!)['@type']).toBe('FAQPage');
+
+    // The skill prompt and the source content both reach the model.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].system.length).toBeGreaterThan(100);
+    expect(calls[0].user).toContain('FBAR 2026: guía');
+    expect(calls[0].user).toContain('targetLang');
+  });
+
+  it('502s when the model returns unparseable output', async () => {
+    const { app } = setupWithOllama('this is not json');
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(502);
+  });
+
+  it('503s when no Ollama client is configured', async () => {
+    let app: Hono;
+    ({ app, uploadDir } = setup());
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(503);
+  });
+});
+
 describe('first-login password change', () => {
   let app: Hono;
   let uploadDir: string;

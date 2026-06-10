@@ -53,6 +53,22 @@
 
       /* ---- Content editor ---- */
       .content-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 0.4rem; }
+      .content-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+      .lang-tabs { display: flex; align-items: center; gap: 0.4rem; margin: 0.6rem 0 1rem; }
+      .lang-tab {
+        background: transparent; color: var(--primary); border: 1px solid var(--border);
+        border-radius: 999px; padding: 0.4rem 1.1rem; font-weight: 700;
+      }
+      .lang-tab.is-active { background: var(--primary); color: #fff; }
+      #autosave-status { margin-left: auto; font-size: 0.78rem; color: var(--muted); }
+
+      #f-jsonld {
+        width: 100%; min-height: 140px; padding: 0.85rem 0.9rem; resize: vertical;
+        border: 1px solid var(--border); border-radius: 0.6rem; background: #fff;
+        color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.82rem; line-height: 1.5;
+      }
 
       #f-bodyMd {
         width: 100%; min-height: 520px; padding: 0.85rem 0.9rem; resize: vertical;
@@ -120,14 +136,19 @@
         </div>
         <div id="editor-msg"></div>
         <input type="hidden" id="f-id" />
+
+        <div class="lang-tabs">
+          <button type="button" class="lang-tab is-active" data-lang="es">Español</button>
+          <button type="button" class="lang-tab" data-lang="en">English</button>
+          <span id="autosave-status"></span>
+        </div>
+
         <div class="row">
           <div><label>Título</label><input id="f-title" /></div>
           <div><label>Slug (URL)</label><input id="f-slug" placeholder="mi-articulo" /></div>
         </div>
-        <div class="row">
-          <div><label>Idioma</label><select id="f-lang"><option value="es">es</option><option value="en">en</option></select></div>
-          <div><label>ID del grupo de traducción <small>(enlaza es/en)</small></label><input id="f-tkey" placeholder="mi-articulo" /></div>
-        </div>
+        <label>ID del grupo de traducción <small>(enlaza es/en)</small></label>
+        <input id="f-tkey" placeholder="mi-articulo" />
         <label>Descripción</label>
         <input id="f-description" />
         <div class="row">
@@ -152,8 +173,15 @@
         <!-- Content: rich text editor (WYSIWYG + Markdown toggle) -->
         <div class="content-head">
           <label style="margin:0">Contenido</label>
+          <div class="content-actions">
+            <button class="ghost" type="button" id="process-btn" title="Extrae frontmatter, tags y JSON-LD de un texto pegado y rellena los campos">Procesar texto pegado</button>
+            <button class="ghost" type="button" id="translate-btn">Traducir con IA</button>
+          </div>
         </div>
-        <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown."></textarea>
+        <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown, o pega un documento completo (con frontmatter y JSON-LD) y pulsa «Procesar texto pegado»."></textarea>
+
+        <label>JSON-LD personalizado <small>(opcional; p. ej. FAQPage. Se publica junto al Article generado)</small></label>
+        <textarea id="f-jsonld" spellcheck="false" placeholder='{"@context": "...", "@type": "FAQPage", "mainEntity": [...]}'></textarea>
 
         <details class="site-preview" open>
           <summary>Vista previa · como se verá publicado en el sitio</summary>

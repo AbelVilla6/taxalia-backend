@@ -199,6 +199,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
         uploadDir: env.UPLOAD_DIR,
         sessionTtlMs: env.SESSION_TTL_HOURS * 3_600_000,
         cookieSecure: process.env.NODE_ENV === 'production',
+        ollama: client,
       }),
     );
 
