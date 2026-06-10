@@ -6,6 +6,8 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
+import { buildContactRouter } from './contact/routes.js';
+import { createContactSender } from './contact/mail.js';
 import { buildChatRouter } from './chat/routes.js';
 import { createArtifactRegistry } from './loaders/registry.js';
 import { openBlogDb } from './content/db.js';
@@ -106,6 +108,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
+  const sendContactSubmission = createContactSender(env);
   const semaphore = new Semaphore(env.DISPATCH_CONCURRENCY_CAP);
   const coldStart = new ColdStartGate(60_000);
 
@@ -151,6 +154,13 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
       semaphore,
       agentTimeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
       coldStart,
+      logger,
+    }),
+  );
+  app.route(
+    '/',
+    buildContactRouter({
+      sendSubmission: sendContactSubmission,
       logger,
     }),
   );

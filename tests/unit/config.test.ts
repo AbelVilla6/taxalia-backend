@@ -35,4 +35,8 @@ describe('loadConfig', () => {
       'custom-model',
     );
   });
+
+  it('defaults the contact recipient to info@hitaxalia.com', () => {
+    expect(loadConfig({}).CONTACT_EMAIL_TO).toBe('info@hitaxalia.com');
+  });
 });

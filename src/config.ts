@@ -8,6 +8,18 @@ const EnvSchema = z.object({
   OLLAMA_MODEL: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(4324),
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  SMTP_HOST: z.string().trim().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_USER: z.string().trim().min(1).optional(),
+  SMTP_PASS: z.string().trim().min(1).optional(),
+  CONTACT_EMAIL_TO: z.string().email().default('info@hitaxalia.com'),
+  CONTACT_EMAIL_FROM: z
+    .string()
+    .trim()
+    .min(1)
+    .default('LB&Co Global Advisors <info@hitaxalia.com>'),
+  CONTACT_EMAIL_SUBJECT_PREFIX: z.string().trim().min(1).default('[LB&Co Contact]'),
   CORS_ALLOWED_ORIGINS: z
     .string()
     .default('http://localhost:4321,http://localhost:4322'),
