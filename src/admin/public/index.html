@@ -121,6 +121,27 @@
       .tui-media-btn:hover { background: rgba(76, 54, 45, 0.1); color: var(--primary); }
       .tui-media-btn svg { display: block; }
 
+      /* Write / Preview tabs injected in the toolbar (WYSIWYG mode only) */
+      .taxalia-tab-container {
+        background: #faf6f0;
+        padding: 8px 10px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .taxalia-tab-container .tab-item {
+        display: inline-block; cursor: pointer; user-select: none;
+        font-size: 0.8rem; font-weight: 700; color: var(--muted);
+        padding: 0.45rem 1.15rem; margin-bottom: -1px;
+        border: 1px solid transparent; border-bottom: none;
+        border-radius: 8px 8px 0 0;
+      }
+      .taxalia-tab-container .tab-item:hover { color: var(--primary); }
+      .taxalia-tab-container .tab-item.active {
+        background: #fff; border-color: var(--border);
+        border-bottom: 1px solid #fff; color: var(--primary);
+      }
+      .taxalia-preview-frame { display: block; width: 100%; border: 0; background: var(--bg); }
+      .toastui-editor-defaultUI-toolbar.is-preview-disabled { pointer-events: none; opacity: 0.45; }
+
       .site-preview { margin-top: 1rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow: hidden; }
       .site-preview > summary {
         cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 700;

@@ -173,6 +173,7 @@ const frame = $('preview-frame');
 // bilingual-editor logic reads and writes. Toast UI mirrors it: editor changes
 // sync into the textarea, and programmatic writes go through setBody().
 let tui = null;
+let resetTabsToWrite = null; // set by setupEditorTabs
 
 function setBody(md) {
   bodyEditor.value = md;
@@ -244,6 +245,76 @@ function ensureEditor() {
 
   $('editor-mount').hidden = false;
   bodyEditor.hidden = true;
+  setupEditorTabs();
+}
+
+// Toast UI only renders its native Write/Preview tabs in Markdown mode, so we
+// inject an equivalent tab row into the toolbar for WYSIWYG mode. The preview
+// uses /api/admin/preview inside an iframe with preview.css → matches the
+// published article 1:1 without leaking styles into the admin page.
+function setupEditorTabs() {
+  const root = $('editor-mount');
+  const toolbar = root.querySelector('.toastui-editor-toolbar');
+  const buttonsRow = root.querySelector('.toastui-editor-defaultUI-toolbar');
+  const mainArea = root.querySelector('.toastui-editor-main');
+  if (!toolbar || !buttonsRow || !mainArea) return;
+
+  const container = document.createElement('div');
+  container.className = 'taxalia-tab-container';
+  const tabs = document.createElement('div');
+  tabs.className = 'toastui-editor-tabs';
+  const tabWrite = document.createElement('div');
+  tabWrite.className = 'tab-item active';
+  tabWrite.textContent = 'Escribir';
+  const tabPreview = document.createElement('div');
+  tabPreview.className = 'tab-item';
+  tabPreview.textContent = 'Vista previa';
+  tabs.append(tabWrite, tabPreview);
+  container.appendChild(tabs);
+  toolbar.insertBefore(container, toolbar.firstChild);
+
+  const pframe = document.createElement('iframe');
+  pframe.className = 'taxalia-preview-frame';
+  pframe.title = 'Vista previa del artículo';
+  pframe.hidden = true;
+  mainArea.insertAdjacentElement('afterend', pframe);
+
+  const showWrite = () => {
+    tabWrite.classList.add('active');
+    tabPreview.classList.remove('active');
+    mainArea.style.display = '';
+    pframe.hidden = true;
+    buttonsRow.classList.remove('is-preview-disabled');
+  };
+
+  const showPreview = async () => {
+    tabPreview.classList.add('active');
+    tabWrite.classList.remove('active');
+    pframe.style.height = mainArea.offsetHeight + 'px';
+    mainArea.style.display = 'none';
+    pframe.hidden = false;
+    buttonsRow.classList.add('is-preview-disabled');
+
+    const { data } = await api('/preview', {
+      method: 'POST',
+      body: JSON.stringify({ markdown: bodyEditor.value }),
+    });
+    const html = data?.html || '<p class="preview-empty">Sin contenido todavía…</p>';
+    pframe.srcdoc =
+      '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+      '<link rel="stylesheet" href="/admin/preview.css"></head>' +
+      '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
+  };
+
+  tabWrite.addEventListener('click', showWrite);
+  tabPreview.addEventListener('click', showPreview);
+  resetTabsToWrite = showWrite;
+
+  // In Markdown mode Toast UI shows its own native tabs — hide ours.
+  tui.on('changeMode', (mode) => {
+    container.style.display = mode === 'markdown' ? 'none' : '';
+    showWrite();
+  });
 }
 
 function insertYouTube() {
@@ -392,6 +463,7 @@ async function openEditor(id) {
   // and sync it with whatever writeForm put in the textarea.
   ensureEditor();
   if (tui) tui.setMarkdown(bodyEditor.value, false);
+  if (resetTabsToWrite) resetTabsToWrite();
   renderPreview();
 }
 
@@ -455,6 +527,7 @@ async function switchLang(target) {
   }
   writeForm(ed.forms[target]);
   renderTabs();
+  if (resetTabsToWrite) resetTabsToWrite();
   renderPreview();
 }
 
