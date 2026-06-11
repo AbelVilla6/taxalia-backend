@@ -514,8 +514,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Tax forms and calculator arranged on a desk',
     tags: ['FBAR', 'Foreign Accounts', 'Compliance'],
     draft: false,
-    pubDate: '2026-06-10',
-    updatedDate: '2026-06-10',
+    pubDate: '2024-03-18',
+    updatedDate: '2024-03-18',
   },
   {
     slug: 'fbar-cuentas-bancarias-extranjeras',
@@ -530,8 +530,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Formularios fiscales y calculadora sobre una mesa',
     tags: ['FBAR', 'Cuentas extranjeras', 'Compliance'],
     draft: false,
-    pubDate: '2026-06-10',
-    updatedDate: '2026-06-10',
+    pubDate: '2024-03-18',
+    updatedDate: '2024-03-18',
   },
   {
     slug: 'foreign-tax-credit-guide',
@@ -546,8 +546,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'U.S. tax forms with calculator and pen',
     tags: ['Foreign Tax Credit', 'Form 1116', 'International Tax'],
     draft: false,
-    pubDate: '2026-06-09',
-    updatedDate: '2026-06-10',
+    pubDate: '2024-11-07',
+    updatedDate: '2024-11-07',
   },
   {
     slug: 'credito-impuestos-extranjeros',
@@ -562,8 +562,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Formularios fiscales estadounidenses con calculadora y bolígrafo',
     tags: ['Foreign Tax Credit', 'Form 1116', 'Fiscalidad internacional'],
     draft: false,
-    pubDate: '2026-06-09',
-    updatedDate: '2026-06-10',
+    pubDate: '2024-11-07',
+    updatedDate: '2024-11-07',
   },
   {
     slug: 'income-tax-treaty-benefits',
@@ -578,8 +578,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Tax documents, phone calculator and coffee on a desk',
     tags: ['Tax Treaty', 'Form 8833', 'Cross-Border Tax'],
     draft: false,
-    pubDate: '2026-06-08',
-    updatedDate: '2026-06-10',
+    pubDate: '2025-08-22',
+    updatedDate: '2025-08-22',
   },
   {
     slug: 'convenios-fiscales-eeuu',
@@ -594,8 +594,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Documentos fiscales, calculadora del móvil y café sobre una mesa',
     tags: ['Convenios fiscales', 'Form 8833', 'Fiscalidad internacional'],
     draft: false,
-    pubDate: '2026-06-08',
-    updatedDate: '2026-06-10',
+    pubDate: '2025-08-22',
+    updatedDate: '2025-08-22',
   },
   {
     slug: 'streamlined-filing-compliance-procedures',
@@ -610,8 +610,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Tax forms and calculator in a folder on a dark desk',
     tags: ['Streamlined Filing', 'Offshore Compliance', 'FBAR'],
     draft: false,
-    pubDate: '2026-06-07',
-    updatedDate: '2026-06-10',
+    pubDate: '2026-02-14',
+    updatedDate: '2026-02-14',
   },
   {
     slug: 'procedimientos-streamlined-compliance',
@@ -626,8 +626,8 @@ const SEED_POSTS: Post[] = [
     heroAlt: 'Formularios fiscales y calculadora dentro de una carpeta sobre mesa oscura',
     tags: ['Streamlined Filing', 'Offshore Compliance', 'FBAR'],
     draft: false,
-    pubDate: '2026-06-07',
-    updatedDate: '2026-06-10',
+    pubDate: '2026-02-14',
+    updatedDate: '2026-02-14',
   },
 ];
 

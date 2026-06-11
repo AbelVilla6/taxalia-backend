@@ -276,14 +276,30 @@ function selectColumns(): string {
   `;
 }
 
+function postTranslationGroupId(post: Post): string {
+  const rawPost = post as Post & {
+    translationGroupId?: string | null;
+    translationKey?: string | null;
+    translation_key?: string | null;
+  };
+
+  return (
+    rawPost.translationGroupId ??
+    rawPost.translationKey ??
+    rawPost.translation_key ??
+    rawPost.slug
+  );
+}
+
 function toParams(post: Post): Record<string, unknown> {
   const rendered = renderPostHtml(post.bodyMd);
+  const translationGroupId = postTranslationGroupId(post);
 
   return {
     slug: post.slug,
     lang: post.lang,
-    translationGroupId: post.translationGroupId,
-    translationKey: post.translationGroupId,
+    translationGroupId,
+    translationKey: translationGroupId,
     title: post.title,
     description: post.description,
     bodyMd: post.bodyMd,
@@ -291,7 +307,7 @@ function toParams(post: Post): Record<string, unknown> {
     author: post.author,
     heroImage: post.heroImage ?? null,
     heroAlt: post.heroAlt ?? null,
-    tags: JSON.stringify(post.tags),
+    tags: JSON.stringify(post.tags ?? []),
     draft: post.draft ? 1 : 0,
     pubDate: post.pubDate,
     updatedDate: post.updatedDate ?? null,
@@ -363,6 +379,8 @@ export class PostRepository {
       .prepare(`SELECT translation_group_id FROM posts WHERE slug = ? AND lang = ? LIMIT 1`)
       .get(post.slug, post.lang) as { translation_group_id: string } | undefined;
 
+    const params = toParams(post);
+
     this.db
       .prepare(
         `INSERT INTO posts
@@ -399,10 +417,11 @@ export class PostRepository {
            toc_json = excluded.toc_json,
            json_ld = excluded.json_ld`,
       )
-      .run(toParams(post));
+      .run(params);
 
-    this.syncTranslationGroup(post.translationGroupId, post.draft);
-    if (existing && existing.translation_group_id !== post.translationGroupId) {
+    const translationGroupId = params.translationGroupId as string;
+    this.syncTranslationGroup(translationGroupId, post.draft);
+    if (existing && existing.translation_group_id !== translationGroupId) {
       this.refreshTranslationGroup(existing.translation_group_id);
     }
   }
@@ -436,6 +455,8 @@ export class PostRepository {
 
   /** Creates a new post, rendering its Markdown. Returns the new id. */
   create(post: Post): number {
+    const params = toParams(post);
+
     const result = this.db
       .prepare(
         `INSERT INTO posts
@@ -449,9 +470,9 @@ export class PostRepository {
             @metaTitle, @metaDescription, @focusKeyword, @secondaryKeywords,
             @openGraphImage, @openGraphTitle, @openGraphDescription, @tocJson, @jsonLd)`,
       )
-      .run(toParams(post));
+      .run(params);
 
-    this.syncTranslationGroup(post.translationGroupId, post.draft);
+    this.syncTranslationGroup(params.translationGroupId as string, post.draft);
     return Number(result.lastInsertRowid);
   }
 
@@ -459,6 +480,8 @@ export class PostRepository {
   updateById(id: number, post: Post): boolean {
     const existing = this.getById(id);
     if (!existing) return false;
+
+    const params = toParams(post);
 
     const result = this.db
       .prepare(
@@ -476,10 +499,11 @@ export class PostRepository {
            json_ld = @jsonLd
          WHERE id = @id`,
       )
-      .run({ ...toParams(post), id });
+      .run({ ...params, id });
 
-    this.syncTranslationGroup(post.translationGroupId, post.draft);
-    if (existing.translationGroupId !== post.translationGroupId) {
+    const translationGroupId = params.translationGroupId as string;
+    this.syncTranslationGroup(translationGroupId, post.draft);
+    if (existing.translationGroupId !== translationGroupId) {
       this.refreshTranslationGroup(existing.translationGroupId);
     }
 
