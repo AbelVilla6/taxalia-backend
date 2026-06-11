@@ -25,6 +25,8 @@ export interface AdminDeps {
   uploadDir: string;
   sessionTtlMs: number;
   cookieSecure: boolean;
+  /** Absolute public base URL of the backend (e.g. https://api.taxalia.com). When set, uploaded media URLs are absolute instead of relative. */
+  backendPublicUrl?: string;
   /** Optional: enables the editorial translate endpoint. */
   ollama?: OllamaClient;
 }
@@ -327,8 +329,8 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(join(resolve(uploadDir), name), buffer);
 
-    // Public URL is served by the backend at /uploads/<name>.
-    return c.json({ url: `/uploads/${name}` }, 201);
+    const base = deps.backendPublicUrl ? deps.backendPublicUrl.replace(/\/+$/, '') : '';
+    return c.json({ url: `${base}/uploads/${name}` }, 201);
   });
 
   return app;

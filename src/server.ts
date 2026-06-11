@@ -172,7 +172,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   try {
     const db = openBlogDb(env.BLOG_DB_PATH);
     const repo = new PostRepository(db, env.FRONTEND_SITE_URL);
-    const seeded = seedIfEmpty(repo);
+    const seeded = seedIfEmpty(repo, env.BACKEND_PUBLIC_URL);
     logger.info(
       { dbPath: env.BLOG_DB_PATH, seeded },
       'blog content store ready',
@@ -199,6 +199,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
         uploadDir: env.UPLOAD_DIR,
         sessionTtlMs: env.SESSION_TTL_HOURS * 3_600_000,
         cookieSecure: process.env.NODE_ENV === 'production',
+        backendPublicUrl: env.BACKEND_PUBLIC_URL,
         ollama: client,
       }),
     );

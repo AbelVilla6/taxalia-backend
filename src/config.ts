@@ -38,6 +38,7 @@ const EnvSchema = z.object({
   UPLOAD_DIR: z.string().default('./data/uploads'),
   CALCOM_URL: z.string().url().default('https://cal.com/felipe-costa'),
   FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
+  BACKEND_PUBLIC_URL: z.string().url().optional(),
 });
 
 export type Env = Omit<z.infer<typeof EnvSchema>, 'OLLAMA_HOST' | 'OLLAMA_MODEL'> & {
