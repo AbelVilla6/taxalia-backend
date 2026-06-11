@@ -10,9 +10,7 @@ dist/
 coverage/
 
 # local SQLite content database (lives on a persistent volume in prod)
-data/blog.db
-
-
+data/blog.*
 # environment variables
 .env
 
