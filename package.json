@@ -6,13 +6,16 @@
   "engines": {
     "node": "24.x"
   },
-  "scripts": {
+ "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node --import tsx src/server.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "blog:export": "tsx scripts/export-posts.ts",
+    "blog:import": "tsx scripts/import-posts.ts",
+    "blog:import:dry": "tsx scripts/import-posts.ts data/posts-export.json --dry-run"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",
