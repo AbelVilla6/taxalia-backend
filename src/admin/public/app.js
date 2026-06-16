@@ -759,7 +759,7 @@ $('file-picker').addEventListener('change', async (e) => {
   catch (err) { return msg($('editor-msg'), 'No se pudo subir (' + err.message + ').', 'err'); }
 
   if (uploadTarget === 'hero') {
-    $('f-heroImage').value = url;
+    $('f-heroImage').value = url; 
   } else if (uploadTarget === 'video') {
     insertHtmlBlock(`<figure class="blog-media blog-media--wide">\n  <video controls preload="metadata" class="blog-media-video">\n    <source src="${url}" type="${file.type}">\n  </video>\n  <figcaption></figcaption>\n</figure>`);
   } else {
