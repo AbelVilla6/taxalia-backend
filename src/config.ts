@@ -36,7 +36,7 @@ const EnvSchema = z.object({
   ADMIN_PASSWORD: z.string().default('change-me-now'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
   UPLOAD_DIR: z.string().default('./data/uploads'),
-  CALCOM_URL: z.string().url().default('https://cal.com/felipe-costa'),
+  CALCOM_URL: z.string().url().default('https://cal.com/lb-co-global-advisors'),
   FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
 });
 
