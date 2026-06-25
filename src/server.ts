@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
-import { handle } from '@hono/node-server/vercel';
+//import { handle } from '@hono/node-server/vercel';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
@@ -301,14 +301,14 @@ async function main(): Promise<void> {
   );
 }
 
-const env = loadConfig();
+/*const env = loadConfig();
 const registry = createArtifactRegistry();
 
 await registry.reload();
 
 const app = createApp(env, registry);
 
-export default handle(app);
+export default handle(app);*/
 
 if (isMainEntry()) {
   void main();
