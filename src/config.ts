@@ -10,15 +10,15 @@ const EnvSchema = z.object({
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   SMTP_HOST: z.string().trim().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: envBoolean(false),
   SMTP_USER: z.string().trim().min(1).optional(),
   SMTP_PASS: z.string().trim().min(1).optional(),
-  CONTACT_EMAIL_TO: z.string().email().default('info@hitaxalia.com'),
+  CONTACT_EMAIL_TO: z.string().email().default('info@lbglobaltax.com'),
   CONTACT_EMAIL_FROM: z
     .string()
     .trim()
     .min(1)
-    .default('LB&Co Global Advisors <info@hitaxalia.com>'),
+    .default('info@lbglobaltax.com'),
   CONTACT_EMAIL_SUBJECT_PREFIX: z.string().trim().min(1).default('[LB&Co Contact]'),
   CORS_ALLOWED_ORIGINS: z
     .string()
@@ -28,10 +28,7 @@ const EnvSchema = z.object({
     .default('info'),
   DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
   BLOG_DB_PATH: z.string().default('./data/blog.db'),
-  SKIP_OLLAMA_CHECK: z
-    .string()
-    .optional()
-    .transform((v) => v === '1' || v === 'true'),
+  SKIP_OLLAMA_CHECK: envBoolean(false),
   ADMIN_USERNAME: z.string().default('admin'),
   ADMIN_PASSWORD: z.string().default('change-me-now'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
@@ -86,4 +83,20 @@ export function corsAllowlist(env: Env): string[] {
   return env.CORS_ALLOWED_ORIGINS.split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function envBoolean(defaultValue: boolean) {
+  return z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((value) => {
+      if (value === undefined || value === null || value === '') return defaultValue;
+      if (typeof value === 'boolean') return value;
+
+      const normalized = value.trim().toLowerCase();
+      if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+      if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+
+      return Boolean(value);
+    });
 }

@@ -172,7 +172,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   try {
     const db = openBlogDb(env.BLOG_DB_PATH);
     const repo = new PostRepository(db, env.FRONTEND_SITE_URL);
-    const seeded = seedIfEmpty(repo, env.BACKEND_PUBLIC_URL);
+    const seeded = seedIfEmpty(repo);
     logger.info(
       { dbPath: env.BLOG_DB_PATH, seeded },
       'blog content store ready',

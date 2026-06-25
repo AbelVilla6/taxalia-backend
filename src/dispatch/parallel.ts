@@ -74,11 +74,14 @@ async function runOne(agent: AgentDef, args: RunAgentsArgs): Promise<AgentResult
   else args.signal.addEventListener('abort', onOuterAbort, { once: true });
 
   try {
+    const allowedSkillIds = new Set(agent.tools);
+    const scopedSkills = args.skills.filter((skill) => allowedSkillIds.has(skill.id));
+
     const system = assembleSystemPrompt({
       lang: args.lang,
       conducta: args.conducta,
-      agent: { systemPrompt: agent.systemPrompt },
-      skills: args.skills.map((s) => ({ id: s.id, description: s.description })),
+      agent: { systemPrompt: agent.systemPrompt, body: agent.body },
+      skills: scopedSkills.map((s) => ({ id: s.id, description: s.description })),
       bookingUrl: args.bookingUrl,
     });
 

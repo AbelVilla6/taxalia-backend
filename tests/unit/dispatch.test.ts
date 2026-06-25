@@ -94,7 +94,7 @@ describe('runChatPipeline (preflight contract)', () => {
     const client = makeClient({
       chatOnce: () => Promise.reject(unreachable),
     });
-    const registry = makeRegistry(makeSnapshot([makeAgent('advisory')]));
+    const registry = makeRegistry(makeSnapshot([makeAgent('income-tax')]));
 
     await expect(runChatPipeline(makeOpts({ client, registry }))).rejects.toBeInstanceOf(
       PipelineError,
@@ -121,7 +121,7 @@ describe('runChatPipeline (preflight contract)', () => {
     const client = makeClient({
       chatOnce: () => Promise.reject(missing),
     });
-    const registry = makeRegistry(makeSnapshot([makeAgent('advisory')]));
+    const registry = makeRegistry(makeSnapshot([makeAgent('income-tax')]));
 
     await expect(
       runChatPipeline(makeOpts({ client, registry })),

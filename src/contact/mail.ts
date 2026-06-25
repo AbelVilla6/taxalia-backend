@@ -40,7 +40,7 @@ export function createContactSender(env: Pick<Env, 'SMTP_HOST' | 'SMTP_PORT' | '
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) {
     return async () => {
       throw new ContactMailerConfigError(
-        'Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable contact form delivery.',
+        'Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable contact form delivery. For Brevo, use your SMTP login and key.',
       );
     };
   }

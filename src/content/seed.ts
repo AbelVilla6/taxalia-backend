@@ -441,7 +441,7 @@ const LEGACY_POSTS_TO_HIDE: Post[] = [
   {
     slug: 'multimedia-post-example',
     lang: 'en',
-    translationKey: 'multimedia-post',
+    translationGroupId: 'multimedia-post',
     title: 'Multimedia post example',
     description: 'Hidden legacy example post.',
     bodyMd: '',
@@ -456,7 +456,7 @@ const LEGACY_POSTS_TO_HIDE: Post[] = [
   {
     slug: 'ejemplo-post-multimedia',
     lang: 'es',
-    translationKey: 'multimedia-post',
+    translationGroupId: 'multimedia-post',
     title: 'Ejemplo de post multimedia',
     description: 'Artículo antiguo oculto.',
     bodyMd: '',
@@ -471,7 +471,7 @@ const LEGACY_POSTS_TO_HIDE: Post[] = [
   {
     slug: 'business-valuation-101',
     lang: 'en',
-    translationKey: 'valuation-101',
+    translationGroupId: 'valuation-101',
     title: 'Business Valuation 101',
     description: 'Hidden legacy valuation post.',
     bodyMd: '',
@@ -486,7 +486,7 @@ const LEGACY_POSTS_TO_HIDE: Post[] = [
   {
     slug: 'valoracion-de-empresas-101',
     lang: 'es',
-    translationKey: 'valuation-101',
+    translationGroupId: 'valuation-101',
     title: 'Valoración de empresas 101',
     description: 'Artículo antiguo oculto.',
     bodyMd: '',
@@ -504,7 +504,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'fbar-foreign-bank-accounts',
     lang: 'en',
-    translationKey: 'fbar-foreign-bank-accounts',
+    translationGroupId: 'fbar-foreign-bank-accounts',
     title: 'FBAR: reporting foreign bank and financial accounts',
     description:
       'A practical guide to when U.S. taxpayers may need to file FinCEN Form 114 for foreign financial accounts.',
@@ -520,7 +520,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'fbar-cuentas-bancarias-extranjeras',
     lang: 'es',
-    translationKey: 'fbar-foreign-bank-accounts',
+    translationGroupId: 'fbar-foreign-bank-accounts',
     title: 'FBAR: cómo declarar cuentas bancarias y financieras extranjeras',
     description:
       'Guía práctica para entender cuándo un contribuyente estadounidense puede tener que presentar FinCEN Form 114.',
@@ -536,7 +536,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'foreign-tax-credit-guide',
     lang: 'en',
-    translationKey: 'foreign-tax-credit-guide',
+    translationGroupId: 'foreign-tax-credit-guide',
     title: 'Foreign tax credit: avoiding double taxation',
     description:
       'How the foreign tax credit can reduce double taxation when foreign income is also taxed in the United States.',
@@ -552,7 +552,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'credito-impuestos-extranjeros',
     lang: 'es',
-    translationKey: 'foreign-tax-credit-guide',
+    translationGroupId: 'foreign-tax-credit-guide',
     title: 'Foreign tax credit: cómo evitar la doble imposición',
     description:
       'Cómo el crédito por impuestos extranjeros puede reducir la doble imposición cuando una renta extranjera también tributa en Estados Unidos.',
@@ -568,7 +568,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'income-tax-treaty-benefits',
     lang: 'en',
-    translationKey: 'income-tax-treaty-benefits',
+    translationGroupId: 'income-tax-treaty-benefits',
     title: 'Income tax treaties: when they help and when they do not',
     description:
       'A clear explanation of how tax treaties may affect cross-border income, disclosure and treaty-based return positions.',
@@ -584,7 +584,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'convenios-fiscales-eeuu',
     lang: 'es',
-    translationKey: 'income-tax-treaty-benefits',
+    translationGroupId: 'income-tax-treaty-benefits',
     title: 'Convenios fiscales con Estados Unidos: cuándo ayudan y cuándo no',
     description:
       'Explicación clara de cómo un convenio fiscal puede afectar rentas internacionales, disclosures y posiciones basadas en tratado.',
@@ -600,7 +600,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'streamlined-filing-compliance-procedures',
     lang: 'en',
-    translationKey: 'streamlined-filing-compliance-procedures',
+    translationGroupId: 'streamlined-filing-compliance-procedures',
     title: 'Streamlined filing compliance procedures: getting back into compliance',
     description:
       'What non-willful taxpayers should know about the IRS streamlined domestic and foreign offshore procedures.',
@@ -616,7 +616,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'procedimientos-streamlined-compliance',
     lang: 'es',
-    translationKey: 'streamlined-filing-compliance-procedures',
+    translationGroupId: 'streamlined-filing-compliance-procedures',
     title: 'Procedimientos streamlined: cómo volver a estar en cumplimiento',
     description:
       'Qué deben saber los contribuyentes no intencionales sobre las vías streamlined domestic y foreign offshore del IRS.',

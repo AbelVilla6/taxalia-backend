@@ -14,10 +14,14 @@ export type AgentDef = LoadedArtifact<z.infer<typeof AgentDefSchema>> & {
   systemPrompt: string;
 };
 
+const SERVICE_AGENT_IDS = new Set(['income-tax', 'business-accounting', 'irs-tax-resolution']);
+
 export async function loadAgents(dir: string): Promise<AgentDef[]> {
   const artifacts = await loadMarkdownArtifacts(dir, AgentDefSchema);
-  return artifacts.map((artifact) => ({
-    ...artifact,
-    systemPrompt: artifact.system_prompt,
-  }));
+  return artifacts
+    .filter((artifact) => SERVICE_AGENT_IDS.has(artifact.id))
+    .map((artifact) => ({
+      ...artifact,
+      systemPrompt: artifact.system_prompt,
+    }));
 }

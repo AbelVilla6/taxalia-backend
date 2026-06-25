@@ -60,9 +60,9 @@ function makeFullSnapshot(agents: AgentDef[]): ArtifactRegistrySnapshot {
 }
 
 const AGENTS: AgentDef[] = [
-  makeAgent('advisory', 'Advisory services'),
-  makeAgent('valuation', 'Valuation services'),
-  makeAgent('financial', 'Financial services'),
+  makeAgent('income-tax', 'Income tax services'),
+  makeAgent('business-accounting', 'Business accounting services'),
+  makeAgent('irs-tax-resolution', 'IRS tax resolution services'),
 ];
 
 /**
@@ -133,10 +133,10 @@ function parseSse(body: string): SSEEvent[] {
 }
 
 describe('POST /chat — business prompt visibility (no empty done regression)', () => {
-  it('routes a Spanish valuation prompt to the valuation agent and emits visible text', async () => {
+  it('routes a Spanish income tax prompt to the income tax agent and emits visible text', async () => {
     const client = makeStubClient({
-      orchestratorDecision: { agentsToRun: ['valuation'], reasoning: 'valoraci\u00f3n' },
-      agentText: 'Le explico c\u00f3mo valoramos su empresa...',
+      orchestratorDecision: { agentsToRun: ['income-tax'], reasoning: 'renta' },
+      agentText: 'Le explico c\u00f3mo preparar su declaraci\u00f3n...',
     });
     const registry = makeRegistry(makeFullSnapshot(AGENTS));
     const app = makeAppWithRealPipeline(client, registry);
@@ -148,7 +148,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
         'X-Request-Id': 'req-vis-1',
       },
       body: JSON.stringify({
-        messages: [{ role: 'user', content: 'Necesito un an\u00e1lisis de valoraci\u00f3n de mi empresa' }],
+        messages: [{ role: 'user', content: 'Necesito ayuda con mi impuesto sobre la renta' }],
         lang: 'es',
       }),
     });
@@ -159,13 +159,13 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .filter((e): e is DeltaEvent => 'delta' in e)
       .map((e) => e.delta)
       .join('');
-    expect(text).toContain('valoramos');
+    expect(text).toContain('declaraci\u00f3n');
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
     expect(last.agentResponse).toBe(true);
     expect(last.agents).toHaveLength(1);
-    expect(last.agents[0]?.id).toBe('valuation');
+    expect(last.agents[0]?.id).toBe('income-tax');
   });
 
   it('emits a visible Spanish warning when the LLM returns [] AND the keyword fallback finds nothing', async () => {
@@ -195,13 +195,13 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .map((e) => e.delta)
       .join('');
     expect(text.length).toBeGreaterThan(0);
-    expect(text).toMatch(/Taxalia|asesor|valoraci|financier/i);
+    expect(text).toMatch(/Taxalia|renta|contabilidad|IRS/i);
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
     expect(last.agentResponse).toBe(false);
     expect(last.warning).toBeTruthy();
-    expect(last.warning).toMatch(/Taxalia|asesor|valoraci|financier/i);
+    expect(last.warning).toMatch(/Taxalia|renta|contabilidad|IRS/i);
   });
 
   it('emits a visible English warning when the LLM returns [] AND the keyword fallback finds nothing', async () => {
@@ -228,7 +228,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .map((e) => e.delta)
       .join('');
     expect(text.length).toBeGreaterThan(0);
-    expect(text).toMatch(/Taxalia|advisory|valuation|financial/i);
+    expect(text).toMatch(/Taxalia|income tax|business accounting|IRS tax resolution/i);
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.warning).toBeTruthy();
@@ -267,13 +267,13 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
     expect(last.warning).toContain(bookingUrl);
   });
 
-  it('keyword fallback routes a Spanish business prompt to an agent when the LLM returns []', async () => {
+  it('keyword fallback routes a Spanish accounting prompt to an agent when the LLM returns []', async () => {
     // The LLM under-routes (returns []), but the keyword fallback MUST
-    // rescue this and select the valuation agent so the user gets a
+    // rescue this and select the business accounting agent so the user gets a
     // real answer instead of the no-agents warning.
     const client = makeStubClient({
       orchestratorDecision: { agentsToRun: [], reasoning: '' },
-      agentText: 'An\u00e1lisis de valoraci\u00f3n...',
+      agentText: 'Podemos ayudar con contabilidad empresarial...',
     });
     const registry = makeRegistry(makeFullSnapshot(AGENTS));
     const app = makeAppWithRealPipeline(client, registry);
@@ -283,7 +283,7 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [
-          { role: 'user', content: 'Necesito un an\u00e1lisis de valoraci\u00f3n de mi empresa' },
+          { role: 'user', content: 'Necesito contabilidad empresarial para mi empresa' },
         ],
         lang: 'es',
       }),
@@ -295,11 +295,11 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .filter((e): e is DeltaEvent => 'delta' in e)
       .map((e) => e.delta)
       .join('');
-    expect(text).toContain('valoraci\u00f3n');
+    expect(text).toContain('contabilidad empresarial');
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
     expect(last.agentResponse).toBe(true);
-    expect(last.agents.map((a) => a.id)).toContain('valuation');
+    expect(last.agents.map((a) => a.id)).toContain('business-accounting');
   });
 });

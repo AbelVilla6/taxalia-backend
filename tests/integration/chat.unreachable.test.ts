@@ -50,7 +50,7 @@ function makeApp(): Hono {
   const app = new Hono();
   app.use('*', requestIdMiddleware);
   const registry = makeRegistry({
-    agents: [makeAgent('advisory'), makeAgent('valuation')],
+    agents: [makeAgent('income-tax'), makeAgent('business-accounting')],
     skills: [],
     conducta: [],
   });
@@ -127,7 +127,7 @@ describe('POST /chat when Ollama is unreachable (pre-stream failure)', () => {
       { code: 'MODEL_MISSING' },
     );
     const registry = makeRegistry({
-      agents: [makeAgent('advisory')],
+      agents: [makeAgent('income-tax')],
       skills: [],
       conducta: [],
     });

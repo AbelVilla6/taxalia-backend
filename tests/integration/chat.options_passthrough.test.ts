@@ -128,7 +128,7 @@ const AGENT_TEXT_WITH_OPTIONS = `Income Tax covers personal, business, expat, an
 describe('POST /chat — taxalia-options-json passthrough', () => {
   it('SSE deltas contain the options fenced block when agent emits one', async () => {
     const agents: AgentDef[] = [
-      makeAgent('financial', 'Financial services'),
+      makeAgent('income-tax', 'Income tax services'),
     ];
     const snap: ArtifactRegistrySnapshot = {
       agents,
@@ -136,7 +136,7 @@ describe('POST /chat — taxalia-options-json passthrough', () => {
       conducta: makeConducta(),
     };
     const client = makeStubClient({
-      orchestratorDecision: { agentsToRun: ['financial'], reasoning: 'income tax' },
+      orchestratorDecision: { agentsToRun: ['income-tax'], reasoning: 'income tax' },
       agentText: AGENT_TEXT_WITH_OPTIONS,
     });
     const registry = makeRegistry(snap);

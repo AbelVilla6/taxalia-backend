@@ -30,13 +30,13 @@ const WARNINGS: Record<
     partial: 'Some agents reported partial failures; the answer may be incomplete.',
     allFailed: 'All agents failed.',
     noAgents:
-      "I couldn't match your question to a Taxalia service. Please mention if you need advisory, valuation, or financial help and I'll route you to the right assistant.",
+      "I couldn't match your question to a Taxalia service. Please mention income tax, business accounting, or IRS tax resolution and I'll route you correctly.",
   },
   es: {
     partial: 'Algunos agentes han reportado fallos parciales; la respuesta podría estar incompleta.',
     allFailed: 'Todos los agentes fallaron.',
     noAgents:
-      'No he podido identificar a qué servicio de Taxalia corresponde tu pregunta. Indícanos si necesitas asesoría, valoración o ayuda financiera y te derivamos al asistente correcto.',
+      'No he podido identificar a qué servicio de Taxalia corresponde tu pregunta. Indica si necesitas impuesto sobre la renta, contabilidad empresarial o resolución con el IRS.',
   },
 };
 

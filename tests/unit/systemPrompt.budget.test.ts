@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { assembleSystemPrompt, SystemPromptTooLargeError } from '../../src/dispatch/systemPrompt.js';
 import { loadAgents } from '../../src/agents/loader.js';
@@ -7,7 +8,7 @@ import { loadSkills } from '../../src/skills/loader.js';
 
 // Resolve artifact directories relative to the backend package root so the
 // tests work regardless of cwd when Vitest is invoked.
-const BACKEND_ROOT = join(new URL('../../', import.meta.url).pathname);
+const BACKEND_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const AGENTS_DIR = join(BACKEND_ROOT, 'src/agents');
 const CONDUCTA_DIR = join(BACKEND_ROOT, 'src/conducta');
 const SKILLS_DIR = join(BACKEND_ROOT, 'src/skills');
@@ -27,7 +28,7 @@ describe('system prompt budget', () => {
       assembleSystemPrompt({
         lang: 'en',
         conducta,
-        agent: { systemPrompt: 'Agent prompt' },
+        agent: { systemPrompt: 'Agent prompt', body: '' },
         skills: [
           {
             id: 'huge',
@@ -39,22 +40,23 @@ describe('system prompt budget', () => {
   });
 
   it.each(['en', 'es'] as const)(
-    'real artifacts — financial agent with bookingUrl does not throw (lang: %s)',
+    'real artifacts — income tax agent with bookingUrl does not throw (lang: %s)',
     async (lang) => {
       const [agents, conducta, skills] = await Promise.all([
         loadAgents(AGENTS_DIR),
         loadConducta(CONDUCTA_DIR),
         loadSkills(SKILLS_DIR),
       ]);
-      const financial = agents.find((agent) => agent.id === 'financial');
-      expect(financial).toBeDefined();
+      const incomeTax = agents.find((agent) => agent.id === 'income-tax');
+      expect(incomeTax).toBeDefined();
+      const scopedSkills = skills.filter((skill) => incomeTax!.tools.includes(skill.id));
 
       expect(() =>
         assembleSystemPrompt({
           lang,
           conducta,
-          agent: { systemPrompt: financial!.systemPrompt },
-          skills: skills.map((s) => ({ id: s.id, description: s.description })),
+          agent: { systemPrompt: incomeTax!.systemPrompt, body: incomeTax!.body },
+          skills: scopedSkills.map((s) => ({ id: s.id, description: s.description })),
           bookingUrl: 'https://cal.com/taxalia/consulta',
         }),
       ).not.toThrow(SystemPromptTooLargeError);

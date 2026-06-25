@@ -36,12 +36,24 @@ describe('loadConfig', () => {
     );
   });
 
-  it('defaults the contact recipient to info@hitaxalia.com', () => {
-    expect(loadConfig({}).CONTACT_EMAIL_TO).toBe('info@hitaxalia.com');
+  it('defaults the contact recipient to info@lbglobaltax.com', () => {
+    expect(loadConfig({}).CONTACT_EMAIL_TO).toBe('info@lbglobaltax.com');
   });
 
-  it('defaults CALCOM_URL to https://cal.com/taxalia', () => {
-    expect(loadConfig({}).CALCOM_URL).toBe('https://cal.com/taxalia');
+  it('defaults the contact sender to info@lbglobaltax.com', () => {
+    expect(loadConfig({}).CONTACT_EMAIL_FROM).toBe('info@lbglobaltax.com');
+  });
+
+  it('parses SMTP_SECURE=false as false', () => {
+    expect(loadConfig({ SMTP_SECURE: 'false' }).SMTP_SECURE).toBe(false);
+  });
+
+  it('parses SMTP_SECURE=true as true', () => {
+    expect(loadConfig({ SMTP_SECURE: 'true' }).SMTP_SECURE).toBe(true);
+  });
+
+  it('defaults CALCOM_URL to https://cal.com/lb-co-global-advisors', () => {
+    expect(loadConfig({}).CALCOM_URL).toBe('https://cal.com/lb-co-global-advisors');
   });
 
   it('accepts a custom CALCOM_URL override', () => {

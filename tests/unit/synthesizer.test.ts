@@ -51,7 +51,7 @@ describe('synthesize (synthesizer)', () => {
     })());
     const result = await synthesize({
       userMessage: 'help',
-      agentResults: [okResult('advisory', 'A reply')],
+      agentResults: [okResult('income-tax', 'A reply')],
       lang: 'en',
       client,
     });
@@ -64,7 +64,7 @@ describe('synthesize (synthesizer)', () => {
     })());
     const result = await synthesize({
       userMessage: 'help',
-      agentResults: [errResult('advisory', 'TIMEOUT'), errResult('valuation', 'OLLAMA_ERROR')],
+      agentResults: [errResult('income-tax', 'TIMEOUT'), errResult('business-accounting', 'OLLAMA_ERROR')],
       lang: 'en',
       client,
     });
@@ -81,8 +81,8 @@ describe('synthesize (synthesizer)', () => {
     const result = await synthesize({
       userMessage: 'help me with both',
       agentResults: [
-        okResult('advisory', 'A first take'),
-        okResult('valuation', 'V second take'),
+        okResult('income-tax', 'A first take'),
+        okResult('business-accounting', 'B second take'),
       ],
       lang: 'en',
       client,
@@ -101,8 +101,8 @@ describe('synthesize (synthesizer)', () => {
     const result = await synthesize({
       userMessage: 'help',
       agentResults: [
-        okResult('advisory', 'A reply'),
-        errResult('valuation', 'TIMEOUT'),
+        okResult('income-tax', 'A reply'),
+        errResult('business-accounting', 'TIMEOUT'),
       ],
       lang: 'en',
       client,
@@ -116,7 +116,7 @@ describe('synthesize (synthesizer)', () => {
     await expect(
       synthesize({
         userMessage: 'help',
-        agentResults: [okResult('advisory', 'A'), okResult('valuation', 'V')],
+        agentResults: [okResult('income-tax', 'A'), okResult('business-accounting', 'B')],
         lang: 'en',
         client,
       }),

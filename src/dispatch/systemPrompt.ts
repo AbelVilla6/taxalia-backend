@@ -22,7 +22,7 @@ const RESPONSE_FORMAT: Record<Lang, string> = {
     '```taxalia-options-json',
     '{',
     '  "options": [',
-    '    { "id": "advisory", "label": "Advisory", "message": "I need advisory help" }',
+    '    { "id": "income-tax", "label": "Income Tax", "message": "Tell me about income tax" }',
     '  ]',
     '}',
     '```',
@@ -37,7 +37,7 @@ const RESPONSE_FORMAT: Record<Lang, string> = {
     '```taxalia-options-json',
     '{',
     '  "options": [',
-    '    { "id": "advisory", "label": "Asesoría", "message": "Necesito asesoría" }',
+    '    { "id": "income-tax", "label": "Renta", "message": "Cuéntame sobre renta" }',
     '  ]',
     '}',
     '```',
@@ -85,7 +85,7 @@ export function tokenCount(prompt: string): number {
 export function assembleSystemPrompt(input: {
   lang: Lang;
   conducta: ConductDef[];
-  agent: Pick<AgentDef, 'systemPrompt'>;
+  agent: Pick<AgentDef, 'systemPrompt'> & { body?: string };
   skills: Array<Pick<SkillDef, 'id' | 'description'>>;
   bookingUrl?: string;
 }): string {
@@ -106,10 +106,12 @@ export function assembleSystemPrompt(input: {
     ? BOOKING_SECTION[input.lang](input.bookingUrl)
     : null;
 
+  const agentSections = [input.agent.systemPrompt.trim(), input.agent.body?.trim()].filter(Boolean).join('\n\n');
+
   const sections = [
     BASE_IDENTITY[input.lang],
     `${CONDUCT_HEADER[input.lang]}\n${conductRules}`,
-    input.agent.systemPrompt.trim(),
+    agentSections,
     `## Skills\n${skillLines}`,
     bookingSection,
     RESPONSE_FORMAT[input.lang],

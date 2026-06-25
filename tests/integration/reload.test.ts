@@ -24,10 +24,10 @@ async function write(dir: string, name: string, frontmatter: string): Promise<vo
 }
 
 async function seedValidArtifacts(): Promise<void> {
-  for (const id of ['advisory', 'valuation', 'financial']) {
+  for (const id of ['income-tax', 'business-accounting', 'irs-tax-resolution']) {
     await write('agents', `${id}.md`, `id: ${id}\nname: ${id}\ndescription: ${id}\nsystem_prompt: |\n  Prompt ${id}`);
   }
-  for (const id of ['lookup-engagement-model', 'calculate-valuation', 'capture-lead']) {
+  for (const id of ['income-tax-preparation', 'business-accounting', 'irs-tax-resolution', 'capture-lead']) {
     await write('skills', `${id}.md`, `id: ${id}\nname: ${id}\ndescription: ${id}`);
   }
   for (let i = 1; i <= 5; i++) {

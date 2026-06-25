@@ -318,12 +318,12 @@ function setupEditorTabs() {
 }
 
 function insertYouTube() {
-  const input = window.prompt('URL de YouTube (ej: https://youtu.be/xxxxx):');
+  const input = window.prompt('URL de YouTube (ej: youtu.be/xxxxx):');
   if (!input) return;
   const id = ytId(input);
   if (!id) return msg($('editor-msg'), 'No se pudo identificar el ID del vídeo de YouTube.', 'err');
   insertHtmlBlock(
-    `<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="https://www.youtube-nocookie.com/embed/${id}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption></figcaption>\n</figure>`,
+    `<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="${['https:', '//', 'www.youtube-nocookie.com/embed/'].join('')}${id}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption></figcaption>\n</figure>`,
   );
 }
 

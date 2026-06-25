@@ -32,27 +32,33 @@ function makeClient(responder: (req: OllamaChatRequest) => Promise<OllamaChatRes
   };
 }
 
+const AGENTS = [
+  makeAgent('income-tax', 'Income tax services'),
+  makeAgent('business-accounting', 'Business accounting services'),
+  makeAgent('irs-tax-resolution', 'IRS tax resolution services'),
+];
+
 const FIXTURES: ReadonlyArray<{ userMessage: string; expected: string[] }> = [
-  { userMessage: 'I need an advisory quote', expected: ['advisory'] },
-  { userMessage: 'Can you help me value my company?', expected: ['valuation'] },
-  { userMessage: 'I need help with my finances', expected: ['financial'] },
+  { userMessage: 'Tell me about your income tax services', expected: ['income-tax'] },
+  { userMessage: 'Tell me about your business accounting services', expected: ['business-accounting'] },
+  { userMessage: 'Tell me about your IRS tax resolution services', expected: ['irs-tax-resolution'] },
   { userMessage: 'Tell me about your services', expected: [] },
   { userMessage: 'hola, qué hacen?', expected: [] },
-  { userMessage: 'Quiero entender valoración y finanzas', expected: ['valuation', 'financial'] },
-  { userMessage: 'How do I plan my taxes?', expected: ['financial'] },
-  { userMessage: 'I have an advisory question and need a valuation', expected: ['advisory', 'valuation'] },
-  { userMessage: 'Could you help me with financial planning?', expected: ['financial'] },
+  { userMessage: 'Cuéntame sobre sus servicios de impuestos sobre la renta', expected: ['income-tax'] },
+  { userMessage: 'How do I plan my taxes?', expected: ['income-tax'] },
+  { userMessage: 'I need payroll and tax return help', expected: ['income-tax', 'business-accounting'] },
+  { userMessage: 'Could you help me with bookkeeping?', expected: ['business-accounting'] },
   { userMessage: 'Random small talk, hi there', expected: [] },
   { userMessage: 'I want to discuss an investment opportunity', expected: [] },
-  { userMessage: 'Necesito un an\u00e1lisis de valoraci\u00f3n', expected: ['valuation'] },
-  { userMessage: 'Looking for advisory services and financial guidance', expected: ['advisory', 'financial'] },
-  { userMessage: 'I need a quote for advisory and valuation', expected: ['advisory', 'valuation'] },
+  { userMessage: 'Necesito ayuda con FBAR', expected: ['income-tax'] },
+  { userMessage: 'Looking for business accounting and payroll guidance', expected: ['business-accounting'] },
+  { userMessage: 'I received an IRS notice and owe back taxes', expected: ['irs-tax-resolution'] },
   { userMessage: 'Tell me about your pricing', expected: [] },
-  { userMessage: 'I would like a financial review', expected: ['financial'] },
-  { userMessage: 'What does Taxalia do for advisory clients?', expected: ['advisory'] },
-  { userMessage: 'I want to start a company valuation', expected: ['valuation'] },
+  { userMessage: 'I would like corporation tax preparation', expected: ['business-accounting'] },
+  { userMessage: 'What does Taxalia do for expat tax clients?', expected: ['income-tax'] },
+  { userMessage: 'I need IRS penalty help', expected: ['irs-tax-resolution'] },
   { userMessage: 'What is your address and phone?', expected: [] },
-  { userMessage: 'Schedule me with an advisor', expected: ['advisory'] },
+  { userMessage: 'Do you support small business accounting?', expected: ['business-accounting'] },
 ];
 
 describe('orchestrator.route (mocked Ollama client)', () => {
@@ -63,53 +69,47 @@ describe('orchestrator.route (mocked Ollama client)', () => {
   it('returns the parsed decision from a JSON response (happy path)', async () => {
     const client = makeClient(() => ({
       content: JSON.stringify({
-        agentsToRun: ['advisory'],
-        reasoning: 'User asked for advisory.',
+        agentsToRun: ['income-tax'],
+        reasoning: 'User asked for income tax.',
       }),
     }));
-    const agents = [
-      makeAgent('advisory', 'Advisory services'),
-      makeAgent('valuation', 'Valuation services'),
-    ];
 
     const decision = await route({
-      userMessage: 'I need an advisory quote',
-      agents,
+      userMessage: 'Tell me about your income tax services',
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-1',
     });
-    expect(decision.agentsToRun).toEqual(['advisory']);
-    expect(decision.reasoning).toBe('User asked for advisory.');
+    expect(decision.agentsToRun).toEqual(['income-tax']);
+    expect(decision.reasoning).toBe('User asked for income tax.');
   });
 
   it('drops unknown agent ids from a JSON response (R3)', async () => {
     const warn = vi.fn();
     const client = makeClient(() => ({
       content: JSON.stringify({
-        agentsToRun: ['advisory', 'mystery-agent', 'valuation'],
+        agentsToRun: ['income-tax', 'mystery-agent', 'business-accounting'],
         reasoning: 'mix',
       }),
     }));
-    const agents = [makeAgent('advisory', 'A'), makeAgent('valuation', 'V')];
     const decision = await route({
       userMessage: 'help me',
-      agents,
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-2',
       warn,
     });
-    expect(decision.agentsToRun.sort()).toEqual(['advisory', 'valuation']);
+    expect(decision.agentsToRun.sort()).toEqual(['business-accounting', 'income-tax']);
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/mystery-agent/));
   });
 
   it('returns empty decision and increments counter on parse failure (R2)', async () => {
     const client = makeClient(() => ({ content: 'not json at all' }));
-    const agents = [makeAgent('advisory', 'A')];
     const decision = await route({
       userMessage: 'help me',
-      agents,
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-3',
@@ -117,17 +117,15 @@ describe('orchestrator.route (mocked Ollama client)', () => {
     expect(decision).toEqual({ agentsToRun: [], reasoning: '' });
 
     const { snapshot } = await import('../../src/observability/metrics.js');
-    const counters = snapshot();
-    const parseErr = counters.find((c) => c.name === 'orchestrator_parse_error_total');
+    const parseErr = snapshot().find((c) => c.name === 'orchestrator_parse_error_total');
     expect(parseErr?.value).toBe(1);
   });
 
   it('increments dispatch_orchestrator_calls_total once per call (R9)', async () => {
     const client = makeClient(() => ({ content: '{"agentsToRun":[],"reasoning":""}' }));
-    const agents = [makeAgent('advisory', 'A')];
-    await route({ userMessage: 'hi', agents, lang: 'en', client, requestId: 'r1' });
-    await route({ userMessage: 'hi', agents, lang: 'en', client, requestId: 'r2' });
-    await route({ userMessage: 'hi', agents, lang: 'en', client, requestId: 'r3' });
+    await route({ userMessage: 'hi', agents: AGENTS, lang: 'en', client, requestId: 'r1' });
+    await route({ userMessage: 'hi', agents: AGENTS, lang: 'en', client, requestId: 'r2' });
+    await route({ userMessage: 'hi', agents: AGENTS, lang: 'en', client, requestId: 'r3' });
 
     const { snapshot } = await import('../../src/observability/metrics.js');
     const calls = snapshot().find((c) => c.name === 'dispatch_orchestrator_calls_total');
@@ -141,50 +139,33 @@ describe('orchestrator.route (mocked Ollama client)', () => {
       const expected = fixture?.expected ?? [];
       return { content: JSON.stringify({ agentsToRun: expected, reasoning: 'ok' }) };
     });
-    const agents = [
-      makeAgent('advisory', 'Advisory'),
-      makeAgent('valuation', 'Valuation'),
-      makeAgent('financial', 'Financial'),
-    ];
 
     let parsed = 0;
     for (const f of FIXTURES) {
       const decision = await route({
         userMessage: f.userMessage,
-        agents,
+        agents: AGENTS,
         lang: 'en',
         client,
         requestId: `req-${parsed}`,
       });
-      if (
-        Array.isArray(decision.agentsToRun) &&
-        decision.agentsToRun.sort().join(',') === [...f.expected].sort().join(',')
-      ) {
+      if (decision.agentsToRun.sort().join(',') === [...f.expected].sort().join(',')) {
         parsed += 1;
       }
     }
-    expect(parsed).toBeGreaterThanOrEqual(16);
     expect(parsed).toBe(20);
   });
 
-  // PR4-B Defect B: ollama-js v0.6.3 drops the AbortSignal on the
-  // non-streaming chat path. The orchestrator MUST still enforce its
-  // 10s ceiling independently of ollama-js signal support — the
-  // request can be hung by a slow model and the caller must observe
-  // a parse-fail/fallback (EMPTY_DECISION) within the budget.
   it('enforces the configured timeout via Promise.race and falls back to EMPTY_DECISION', async () => {
     const warn = vi.fn();
-    // chatOnce never resolves (simulates a hung ollama that ignores
-    // the AbortSignal because ollama-js drops it on non-streaming).
     const client = makeClient(
       () => new Promise<OllamaChatResponse>(() => {}),
     );
-    const agents = [makeAgent('advisory', 'A')];
 
     const start = performance.now();
     const decision = await route({
       userMessage: 'help me',
-      agents,
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-timeout',
@@ -194,33 +175,22 @@ describe('orchestrator.route (mocked Ollama client)', () => {
     const elapsed = performance.now() - start;
 
     expect(decision).toEqual({ agentsToRun: [], reasoning: '' });
-    // Promise.race resolution must be observed within the timeout
-    // window (with a small margin for scheduler jitter).
     expect(elapsed).toBeLessThan(1000);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/orchestrator:timeout/),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/orchestrator:timeout/));
 
     const { snapshot } = await import('../../src/observability/metrics.js');
-    const parseErr = snapshot().find(
-      (c) => c.name === 'orchestrator_parse_error_total',
-    );
+    const parseErr = snapshot().find((c) => c.name === 'orchestrator_parse_error_total');
     expect(parseErr?.value).toBe(1);
   });
 
-  // Defect B companion: when the orchestrator signals timeout it must
-  // NOT be mis-classified as OLLAMA_UNREACHABLE / MODEL_MISSING, which
-  // would surface as 503 from the chat route instead of a clean
-  // fallback to empty agents.
   it('does not re-throw ORCHESTRATOR_TIMEOUT (only OLLAMA/MODEL errors propagate)', async () => {
     const client = makeClient(
       () => new Promise<OllamaChatResponse>(() => {}),
     );
-    const agents = [makeAgent('advisory', 'A')];
 
     const decision = await route({
       userMessage: 'help me',
-      agents,
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-timeout-no-rethrow',
@@ -231,75 +201,48 @@ describe('orchestrator.route (mocked Ollama client)', () => {
 });
 
 describe('orchestrator.keywordFallback (pure)', () => {
-  const agents = [
-    { id: 'advisory' },
-    { id: 'valuation' },
-    { id: 'financial' },
-  ];
+  const agents = AGENTS.map((agent) => ({ id: agent.id }));
 
-  it('returns [] for pure small talk in English', () => {
+  it('returns [] for pure small talk', () => {
     expect(keywordFallback('hi there', agents)).toEqual([]);
-    expect(keywordFallback('thanks!', agents)).toEqual([]);
-  });
-
-  it('returns [] for pure small talk in Spanish', () => {
     expect(keywordFallback('hola', agents)).toEqual([]);
-    expect(keywordFallback('gracias', agents)).toEqual([]);
   });
 
-  it('routes a Spanish valuation prompt to the valuation agent', () => {
-    // The prompt intentionally avoids "empresa" / "negocio" so it
-    // matches ONLY the valuation agent. Other tests cover the
-    // multi-agent fan-out.
-    expect(keywordFallback('Necesito un an\u00e1lisis de valoraci\u00f3n', agents)).toEqual([
-      'valuation',
-    ]);
+  it('routes frontend welcome option messages to matching service agents', () => {
+    expect(keywordFallback('Tell me about your income tax services', agents)).toEqual(['income-tax']);
+    expect(keywordFallback('Tell me about your business accounting services', agents)).toEqual(['business-accounting']);
+    expect(keywordFallback('Tell me about your IRS tax resolution services', agents)).toEqual(['irs-tax-resolution']);
+    expect(keywordFallback('Cuéntame sobre sus servicios de contabilidad empresarial', agents)).toEqual(['business-accounting']);
   });
 
-  it('routes a Spanish valuation+finance prompt to both agents', () => {
-    const result = keywordFallback(
-      'Quiero entender valoración y finanzas para mi pyme',
-      agents,
-    );
-    expect(result).toContain('valuation');
-    expect(result).toContain('financial');
+  it('routes income tax terms to the income tax agent', () => {
+    expect(keywordFallback('How do I plan my taxes?', agents)).toEqual(['income-tax']);
+    expect(keywordFallback('Necesito ayuda con FBAR', agents)).toEqual(['income-tax']);
   });
 
-  it('routes "asesor\u00eda" to the advisory agent', () => {
-    expect(
-      keywordFallback('Necesito una asesor\u00eda contable y fiscal', agents),
-    ).toEqual(expect.arrayContaining(['advisory', 'financial']));
+  it('routes accounting terms to the business accounting agent', () => {
+    expect(keywordFallback('I need payroll support', agents)).toEqual(['business-accounting']);
+    expect(keywordFallback('Necesito contabilidad empresarial', agents)).toEqual(['business-accounting']);
   });
 
-  it('routes a tax question to the financial agent', () => {
-    expect(keywordFallback('How do I plan my taxes?', agents)).toEqual([
-      'financial',
-    ]);
+  it('routes IRS terms to the IRS tax resolution agent', () => {
+    expect(keywordFallback('I received an IRS notice', agents)).toEqual(['irs-tax-resolution']);
+    expect(keywordFallback('Tengo una deuda con el IRS', agents)).toEqual(['irs-tax-resolution']);
   });
 
-  it('routes an English business prompt to advisory + financial', () => {
-    const result = keywordFallback(
-      'Looking for advisory services and financial guidance',
-      agents,
-    );
-    expect(result).toContain('advisory');
-    expect(result).toContain('financial');
+  it('routes multi-service prompts to multiple agents', () => {
+    const result = keywordFallback('I need payroll and tax return help', agents);
+    expect(result).toContain('income-tax');
+    expect(result).toContain('business-accounting');
   });
 
   it('drops unknown agent ids from the keyword table', () => {
-    const limited = [{ id: 'advisory' }];
-    // "valoraci\u00f3n" routes to "valuation" which is NOT in the registry
-    // → must NOT appear, and the function must not throw.
-    expect(keywordFallback('valoraci\u00f3n de empresa', limited)).toEqual([
-      'advisory',
-    ]);
+    const limited = [{ id: 'income-tax' }];
+    expect(keywordFallback('I need payroll and tax return help', limited)).toEqual(['income-tax']);
   });
 
   it('is case-insensitive', () => {
-    expect(keywordFallback('VALUATION of my company', agents)).toEqual([
-      'valuation',
-    ]);
-    expect(keywordFallback('Asesor\u00eda LEGAL', agents)).toContain('advisory');
+    expect(keywordFallback('IRS NOTICE', agents)).toEqual(['irs-tax-resolution']);
   });
 });
 
@@ -308,56 +251,42 @@ describe('orchestrator.route keyword-fallback safety net', () => {
     resetMetrics();
   });
 
-  it('routes a Spanish valuation prompt via keyword fallback when the LLM returns []', async () => {
+  it('routes an income tax prompt via keyword fallback when the LLM returns []', async () => {
     const warn = vi.fn();
     const client = makeClient(() => ({
       content: JSON.stringify({ agentsToRun: [], reasoning: 'no idea' }),
     }));
-    const agents = [
-      makeAgent('advisory', 'Advisory services'),
-      makeAgent('valuation', 'Valuation services'),
-      makeAgent('financial', 'Financial services'),
-    ];
 
     const decision = await route({
-      userMessage: 'Necesito un an\u00e1lisis de valoraci\u00f3n',
-      agents,
-      lang: 'es',
+      userMessage: 'How do I plan my taxes?',
+      agents: AGENTS,
+      lang: 'en',
       client,
       requestId: 'req-fb-1',
       warn,
     });
-    expect(decision.agentsToRun).toEqual(['valuation']);
+    expect(decision.agentsToRun).toEqual(['income-tax']);
     expect(decision.reasoning).toMatch(/keyword fallback/);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/orchestrator:keyword-fallback.*valuation/),
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/orchestrator:keyword-fallback.*income-tax/));
 
     const { snapshot } = await import('../../src/observability/metrics.js');
     const fb = snapshot().find((c) => c.name === 'dispatch_keyword_fallback_total');
     expect(fb?.value).toBe(1);
   });
 
-  it('routes an English business prompt via keyword fallback when the LLM returns []', async () => {
-    const warn = vi.fn();
+  it('routes an IRS prompt via keyword fallback when the LLM returns []', async () => {
     const client = makeClient(() => ({
       content: JSON.stringify({ agentsToRun: [], reasoning: '' }),
     }));
-    const agents = [
-      makeAgent('advisory', 'A'),
-      makeAgent('valuation', 'V'),
-      makeAgent('financial', 'F'),
-    ];
 
     const decision = await route({
-      userMessage: 'I need a quote for advisory and valuation',
-      agents,
+      userMessage: 'I received an IRS notice',
+      agents: AGENTS,
       lang: 'en',
       client,
       requestId: 'req-fb-2',
-      warn,
     });
-    expect(decision.agentsToRun.sort()).toEqual(['advisory', 'valuation']);
+    expect(decision.agentsToRun).toEqual(['irs-tax-resolution']);
   });
 
   it('does NOT invoke the fallback for genuine small talk', async () => {
@@ -365,45 +294,35 @@ describe('orchestrator.route keyword-fallback safety net', () => {
     const client = makeClient(() => ({
       content: JSON.stringify({ agentsToRun: [], reasoning: 'small talk' }),
     }));
-    const agents = [
-      makeAgent('advisory', 'A'),
-      makeAgent('valuation', 'V'),
-    ];
 
     const decision = await route({
       userMessage: 'hola, buen día',
-      agents,
+      agents: AGENTS,
       lang: 'es',
       client,
       requestId: 'req-fb-3',
       warn,
     });
     expect(decision.agentsToRun).toEqual([]);
-    expect(warn).not.toHaveBeenCalledWith(
-      expect.stringMatching(/orchestrator:keyword-fallback/),
-    );
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/orchestrator:keyword-fallback/));
   });
 
-  it('preserves the LLM decision when the LLM already picked an agent (fallback is a safety net only)', async () => {
+  it('preserves the LLM decision when the LLM already picked an agent', async () => {
     const client = makeClient(() => ({
       content: JSON.stringify({
-        agentsToRun: ['valuation'],
-        reasoning: 'user asked for valuation',
+        agentsToRun: ['business-accounting'],
+        reasoning: 'user asked for accounting',
       }),
     }));
-    const agents = [
-      makeAgent('advisory', 'A'),
-      makeAgent('valuation', 'V'),
-    ];
 
     const decision = await route({
-      userMessage: 'valoraci\u00f3n de mi empresa',
-      agents,
-      lang: 'es',
+      userMessage: 'I need payroll help',
+      agents: AGENTS,
+      lang: 'en',
       client,
       requestId: 'req-fb-4',
     });
-    expect(decision.agentsToRun).toEqual(['valuation']);
-    expect(decision.reasoning).toBe('user asked for valuation');
+    expect(decision.agentsToRun).toEqual(['business-accounting']);
+    expect(decision.reasoning).toBe('user asked for accounting');
   });
 });

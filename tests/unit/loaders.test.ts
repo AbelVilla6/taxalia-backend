@@ -25,29 +25,29 @@ async function write(dir: string, name: string, frontmatter: string): Promise<vo
 
 describe('loaders', () => {
   it('parses frontmatter with Windows line endings and UTF-8 BOM', () => {
-    const source = '\uFEFF---\r\nid: advisory\r\nname: Advisory\r\n---\r\n# Body\r\n';
+    const source = '\uFEFF---\r\nid: income-tax\r\nname: Income Tax\r\n---\r\n# Body\r\n';
 
-    const result = parseMarkdownFrontmatter('advisory.md', source);
+    const result = parseMarkdownFrontmatter('income-tax.md', source);
 
-    expect(result.frontmatter).toMatchObject({ id: 'advisory', name: 'Advisory' });
+    expect(result.frontmatter).toMatchObject({ id: 'income-tax', name: 'Income Tax' });
     expect(result.body).toBe('# Body');
   });
 
   it('keeps blank lines inside literal block scalars', () => {
     const source =
-      '---\nid: financial\nsystem_prompt: |\n  First paragraph.\n\n  ## Section\n\n  Second paragraph.\nname: Financial\n---\n# Body\n';
+      '---\nid: income-tax\nsystem_prompt: |\n  First paragraph.\n\n  ## Section\n\n  Second paragraph.\nname: Income Tax\n---\n# Body\n';
 
-    const result = parseMarkdownFrontmatter('financial.md', source);
+    const result = parseMarkdownFrontmatter('income-tax.md', source);
 
     expect(result.frontmatter.system_prompt).toBe(
       'First paragraph.\n\n## Section\n\nSecond paragraph.',
     );
-    expect(result.frontmatter.name).toBe('Financial');
+    expect(result.frontmatter.name).toBe('Income Tax');
   });
 
   it('loads valid agent, skill, and conducta frontmatter', async () => {
-    await write('agents', 'advisory.md', 'id: advisory\nname: Advisory\ndescription: Helps\nsystem_prompt: |\n  System prompt\ntools: [lookup-engagement-model]\ntags: [advisory]');
-    await write('skills', 'lookup-engagement-model.md', 'id: lookup-engagement-model\nname: Lookup\ndescription: Finds engagement model');
+    await write('agents', 'income-tax.md', 'id: income-tax\nname: Income Tax\ndescription: Helps\nsystem_prompt: |\n  System prompt\ntools: [income-tax-preparation]\ntags: [income-tax]');
+    await write('skills', 'income-tax-preparation.md', 'id: income-tax-preparation\nname: Income Tax Preparation\ndescription: Explains income tax preparation');
     for (let i = 1; i <= 5; i++) {
       await write('conducta', `policy-${i}.md`, `id: policy-${i}\ndescription: Policy ${i}\nrule: |\n  Rule ${i}\npriority: ${i}`);
     }
@@ -56,8 +56,8 @@ describe('loaders', () => {
     const skills = await loadSkills(join(root, 'skills'));
     const conducta = await loadConducta(join(root, 'conducta'));
 
-    expect(agents[0]).toMatchObject({ id: 'advisory', systemPrompt: 'System prompt' });
-    expect(skills[0]).toMatchObject({ id: 'lookup-engagement-model' });
+    expect(agents[0]).toMatchObject({ id: 'income-tax', systemPrompt: 'System prompt' });
+    expect(skills[0]).toMatchObject({ id: 'income-tax-preparation' });
     expect(conducta).toHaveLength(5);
   });
 

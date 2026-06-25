@@ -19,8 +19,8 @@ import type {
 
 function makeAgentResult(): AgentResult[] {
   return [
-    { id: 'advisory', status: 'ok', text: 'Advisory text', durationMs: 12 },
-    { id: 'valuation', status: 'ok', text: 'Valuation text', durationMs: 18 },
+    { id: 'income-tax', status: 'ok', text: 'Income tax text', durationMs: 12 },
+    { id: 'business-accounting', status: 'ok', text: 'Business accounting text', durationMs: 18 },
   ];
 }
 
@@ -144,7 +144,7 @@ describe('POST /chat happy path (SSE)', () => {
     expect(doneEvent.agentResponse).toBe(true);
     expect(doneEvent.requestId).toBe('req-happy-1');
     expect(doneEvent.agents).toHaveLength(2);
-    expect(doneEvent.agents.map((a) => a.id).sort()).toEqual(['advisory', 'valuation']);
+    expect(doneEvent.agents.map((a) => a.id).sort()).toEqual(['business-accounting', 'income-tax']);
 
     expect(seenRequestIds).toEqual(['req-happy-1']);
   });
@@ -158,7 +158,7 @@ describe('POST /chat happy path (SSE)', () => {
             yield {
               done: true,
               agentResponse: true,
-              agents: [{ id: 'advisory', status: 'ok', text: 'hi', durationMs: 1 }],
+              agents: [{ id: 'income-tax', status: 'ok', text: 'hi', durationMs: 1 }],
               requestId: args.requestId,
             };
           })(),
@@ -225,7 +225,7 @@ describe('POST /chat happy path (SSE)', () => {
               done: true,
               agentResponse: true,
               agents: [
-                { id: 'advisory', status: 'ok', text: 'Hola mundo', durationMs: 5 },
+                { id: 'income-tax', status: 'ok', text: 'Hola mundo', durationMs: 5 },
               ],
               requestId: args.requestId,
             };

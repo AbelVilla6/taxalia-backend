@@ -24,7 +24,7 @@ describe('assembleSystemPrompt', () => {
     const input = {
       lang: 'en' as const,
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
-      agent: { systemPrompt: 'Agent prompt' },
+      agent: { systemPrompt: 'Agent prompt', body: 'Agent body' },
       skills,
     };
     const first = assembleSystemPrompt(input);
@@ -37,13 +37,14 @@ describe('assembleSystemPrompt', () => {
     const prompt = assembleSystemPrompt({
       lang: 'es',
       conducta: [conduct(3), conduct(1), conduct(5), conduct(2), conduct(4)],
-      agent: { systemPrompt: 'Prompt del agente' },
+      agent: { systemPrompt: 'Prompt del agente', body: 'Cuerpo del agente' },
       skills,
     });
 
     expect(prompt).toContain('## Políticas de conducta');
     expect(prompt.indexOf('Rule 1')).toBeLessThan(prompt.indexOf('Rule 2'));
     expect(prompt.indexOf('Rule 2')).toBeLessThan(prompt.indexOf('Rule 3'));
+    expect(prompt).toContain('Cuerpo del agente');
     expect(prompt).toContain('- lookup-engagement-model: Find engagement model');
   });
 
@@ -51,7 +52,7 @@ describe('assembleSystemPrompt', () => {
     const prompt = assembleSystemPrompt({
       lang: 'en',
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
-      agent: { systemPrompt: 'Agent prompt' },
+      agent: { systemPrompt: 'Agent prompt', body: 'Agent body' },
       skills,
       bookingUrl: 'https://cal.com/taxalia',
     });
@@ -63,7 +64,7 @@ describe('assembleSystemPrompt', () => {
     const prompt = assembleSystemPrompt({
       lang: 'es',
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
-      agent: { systemPrompt: 'Prompt del agente' },
+      agent: { systemPrompt: 'Prompt del agente', body: 'Cuerpo del agente' },
       skills,
       bookingUrl: 'https://cal.com/taxalia',
     });
@@ -75,7 +76,7 @@ describe('assembleSystemPrompt', () => {
     const prompt = assembleSystemPrompt({
       lang: 'en',
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
-      agent: { systemPrompt: 'Agent prompt' },
+      agent: { systemPrompt: 'Agent prompt', body: 'Agent body' },
       skills,
     });
     expect(prompt).not.toContain('## Booking');

@@ -49,9 +49,7 @@ describe('content API', () => {
   });
 
   it('returns a single post with SEO payload, alternates, and toc', async () => {
-    const res = await app.fetch(
-      new Request('http://x/api/posts/business-valuation-101?lang=en'),
-    );
+    const res = await app.fetch(new Request('http://x/api/posts/fbar-foreign-bank-accounts?lang=en'));
     expect(res.status).toBe(200);
     const { post } = (await res.json()) as {
       post: {
@@ -73,21 +71,20 @@ describe('content API', () => {
       };
     };
 
-    expect(post.title).toBe('Business Valuation 101');
-    expect(post.translationGroupId).toBe('valuation-101');
+    expect(post.title).toBe('FBAR: reporting foreign bank and financial accounts');
+    expect(post.translationGroupId).toBe('fbar-foreign-bank-accounts');
     expect(post.published).toBe(true);
-    expect(post.contentHtml).toContain('<h2 id="why-valuation-matters">Why valuation matters</h2>');
+    expect(post.contentHtml).toContain('<h2 id="what-is-the-fbar">What is the FBAR?</h2>');
     expect(post.contentHtml).not.toContain('<script');
-    expect(post.alternates.en.slug).toBe('business-valuation-101');
-    expect(post.alternates.es.slug).toBe('valoracion-de-empresas-101');
-    expect(post.seo.metaTitle).toBe('Business Valuation 101');
+    expect(post.alternates.en.slug).toBe('fbar-foreign-bank-accounts');
+    expect(post.alternates.es.slug).toBe('fbar-cuentas-bancarias-extranjeras');
+    expect(post.seo.metaTitle).toBe('FBAR: reporting foreign bank and financial accounts');
     expect(post.seo.metaDescription).toBe(
-      'A practical guide to understanding business valuation methods and how they support better decisions.',
+      'A practical guide to when U.S. taxpayers may need to file FinCEN Form 114 for foreign financial accounts.',
     );
-    expect(post.seo.canonicalUrl).toBe('http://localhost:4321/blog/business-valuation-101');
-    expect(post.toc).toEqual([
-      { id: 'why-valuation-matters', text: 'Why valuation matters', depth: 2 },
-    ]);
+    expect(post.seo.canonicalUrl).toBe('http://localhost:4321/blog/fbar-foreign-bank-accounts');
+    expect(post.toc[0]).toEqual({ id: 'what-is-the-fbar', text: 'What is the FBAR?', depth: 2 });
+    expect(post.toc.length).toBeGreaterThan(1);
     expect(post.articleJsonLd['@type']).toBe('Article');
   });
 
@@ -237,9 +234,7 @@ describe('content API', () => {
   });
 
   it('returns null custom JSON-LD when none is stored', async () => {
-    const res = await app.fetch(
-      new Request('http://x/api/posts/business-valuation-101?lang=en'),
-    );
+    const res = await app.fetch(new Request('http://x/api/posts/fbar-foreign-bank-accounts?lang=en'));
     const { post } = (await res.json()) as { post: { customJsonLd: unknown } };
     expect(post.customJsonLd).toBeNull();
   });

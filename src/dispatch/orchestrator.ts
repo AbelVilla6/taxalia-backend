@@ -25,87 +25,83 @@ const ORCHESTRATOR_TIMEOUT_MS = 10_000;
  * agent ids in `backend/src/agents/*.md`.
  */
 export const KEYWORD_FALLBACK: Readonly<Record<string, readonly string[]>> = {
-  // Spanish \u2014 valuation
-  'valoraci': ['valuation'],
-  'valoraci\u00f3n': ['valuation'],
-  'tasaci': ['valuation'],
-  'tasar': ['valuation'],
-  // Spanish \u2014 financial
-  'finanz': ['financial'],
-  'financiero': ['financial'],
-  'financiera': ['financial'],
-  'contab': ['financial'],
-  'contable': ['financial'],
-  'impuest': ['financial'],
-  'fiscal': ['financial'],
-  'tributari': ['financial'],
-  'declaraci\u00f3n': ['financial'],
-  'renta': ['financial'],
-  'n\u00f3mina': ['financial'],
-  'fbar': ['financial'],
-  'expat': ['financial'],
-  // Spanish \u2014 advisory / scheduling
-  'asesor': ['advisory'],
-  'asesor\u00eda': ['advisory'],
-  'consultor': ['advisory'],
-  'consultor\u00eda': ['advisory'],
-  'empresa': ['advisory'],
-  'negocio': ['valuation', 'advisory'],
-  'cita': ['advisory'],
-  'agendar': ['advisory'],
-  'reuni\u00f3n': ['advisory'],
-  // English \u2014 valuation
-  'valuati': ['valuation'],
-  'value my': ['valuation'],
-  'company valuation': ['valuation'],
-  // English \u2014 financial
-  'financ': ['financial'],
-  'financial plan': ['financial'],
-  'financial review': ['financial'],
-  'tax': ['financial'],
-  'taxes': ['financial'],
-  'tax planning': ['financial'],
-  'income tax': ['financial'],
-  'irs': ['financial'],
-  'payroll': ['financial'],
-  'bookkeeping': ['financial'],
-  'accounting': ['financial'],
-  'account': ['financial'],
-  // English \u2014 advisory / scheduling
-  'advisor': ['advisory'],
-  'advisory': ['advisory'],
-  'consult': ['advisory'],
-  'engagement': ['advisory'],
-  'quote': ['advisory'],
-  'appointment': ['advisory'],
-  'booking': ['advisory'],
-  'schedule': ['advisory'],
-  'business': ['advisory', 'financial'],
+  // Spanish — income tax
+  'renta': ['income-tax'],
+  'impuest': ['income-tax'],
+  'fiscal': ['income-tax'],
+  'tributari': ['income-tax'],
+  'declaración': ['income-tax'],
+  'declaracion': ['income-tax'],
+  'expat': ['income-tax'],
+  'expatri': ['income-tax'],
+  'fbar': ['income-tax'],
+  'extranj': ['income-tax'],
+  'internacional': ['income-tax'],
+  'planificaci': ['income-tax'],
+  // Spanish — business accounting
+  'contab': ['business-accounting'],
+  'contable': ['business-accounting'],
+  'nómina': ['business-accounting'],
+  'nomina': ['business-accounting'],
+  'empresa': ['business-accounting'],
+  'negocio': ['business-accounting'],
+  'sociedad': ['business-accounting'],
+  'corporaci': ['business-accounting'],
+  // Spanish — IRS resolution
+  'irs': ['irs-tax-resolution'],
+  'aviso': ['irs-tax-resolution'],
+  'deuda': ['irs-tax-resolution'],
+  'multa': ['irs-tax-resolution'],
+  'resoluci': ['irs-tax-resolution'],
+  'atras': ['irs-tax-resolution'],
+  // English — income tax
+  'income tax': ['income-tax'],
+  'tax return': ['income-tax'],
+  'taxes': ['income-tax'],
+  'foreign income': ['income-tax'],
+  'fbars': ['income-tax'],
+  'tax planning': ['income-tax'],
+  'international tax': ['income-tax'],
+  // English — business accounting
+  'bookkeeping': ['business-accounting'],
+  'accounting': ['business-accounting'],
+  'payroll': ['business-accounting'],
+  'corporate tax': ['business-accounting'],
+  'small business': ['business-accounting'],
+  'business accounting': ['business-accounting'],
+  // English — IRS resolution
+  'notice': ['irs-tax-resolution'],
+  'back taxes': ['irs-tax-resolution'],
+  'balance due': ['irs-tax-resolution'],
+  'debt': ['irs-tax-resolution'],
+  'resolution': ['irs-tax-resolution'],
+  'penalty': ['irs-tax-resolution'],
+  'audit': ['irs-tax-resolution'],
 };
 
 const ORCHESTRATOR_META_SP: Record<Lang, string> = {
-  en: `You are a routing assistant for Taxalia. Given the user's last message and the list of available agents (one line each: "<id>: <description>"), respond ONLY with a JSON object of shape:
+  en: `You are a routing assistant for Taxalia. Given the user's last message and the list of available service agents (one line each: "<id>: <description>"), respond ONLY with a JSON object of shape:
 { "agentsToRun": <AgentId[]>, "reasoning": "<one short sentence>" }
 
 Routing rules:
-- Pick EVERY agent whose scope matches the user's intent (e.g. a "valuation + financial" prompt selects BOTH "valuation" and "financial").
-- "valuation" handles company valuation, business worth, financial modeling, DCF, multiples, due diligence inputs.
-- "financial" handles taxes, financial planning, accounting, reporting, cash flow.
-- "advisory" handles engagement models, quotes, scheduling, general "what does Taxalia do" questions, and any business / service inquiry.
-- Business, advisory, valuation, financial, accounting, tax, fiscal, company, M&A, due-diligence, or pricing questions MUST select at least one agent.
-- Only return an empty array for pure small talk (greetings, "hi", "thanks", "hola", "gracias", emojis) with no business intent whatsoever.
+- Pick EVERY service agent whose scope matches the user's intent.
+- "income-tax" handles personal returns, business income tax, international/expat tax, FBAR filings, and tax planning.
+- "business-accounting" handles bookkeeping, corporation tax prep, small business accounting, and payroll.
+- "irs-tax-resolution" handles IRS notices, back taxes, balance due problems, penalties, and compliance issues.
+- Tax, income tax, expat, FBAR, bookkeeping, accounting, payroll, IRS, notice, debt, resolution, or business accounting questions MUST select at least one agent.
+- Only return an empty array for pure small talk (greetings, "hi", "thanks", "hola", "gracias", emojis) with no service intent whatsoever.
 - Never invent ids. Respond in English.`,
-  es: `Eres el asistente de enrutamiento de Taxalia. Dado el último mensaje del usuario y la lista de agentes disponibles (una línea por agente: "<id>: <description>"), responde SOLO con un objeto JSON con la forma:
-{ "agentsToRun": <AgentId[]>, "reasoning": "<una oración corta>" }
+  es: `Eres el asistente de enrutamiento de Taxalia. Dado el ultimo mensaje del usuario y la lista de agentes de servicio disponibles (una linea por agente: "<id>: <description>"), responde SOLO con un objeto JSON con la forma:
+{ "agentsToRun": <AgentId[]>, "reasoning": "<una oracion corta>" }
 
 Reglas de enrutamiento:
-- Elige TODOS los agentes cuyo alcance coincida con la intención del usuario (p.ej. un mensaje sobre "valoraci\u00f3n y finanzas" selecciona "valuation" Y "financial").
-- "valuation" maneja valoración de empresas, valor del negocio, modelado financiero, DCF, múltiplos, inputs de due diligence.
-- "financial" maneja impuestos, planificación financiera, contabilidad, reporting, flujo de caja.
-- "advisory" maneja modelos de engagement, cotizaciones, agendar reuniones, preguntas generales tipo "qué hace Taxalia", y cualquier consulta sobre servicios / negocios.
-- Preguntas sobre negocios, asesor\u00eda, valoración, finanzas, contabilidad, impuestos, fiscal, empresa, M&A, due diligence o precios DEBEN seleccionar al menos un agente.
-- Solo devuelve un array vacío para charla pura (saludos, "hola", "gracias", emojis) sin ninguna intención de negocio.
-- Nunca inventes ids. Responde en castellano de España.`,
+- Elige TODOS los agentes de servicio cuyo alcance coincida con la intencion del usuario.
+- "income-tax" maneja declaraciones personales, impuestos de negocio, impuestos internacionales/expat, FBAR y planificacion fiscal.
+- "business-accounting" maneja contabilidad, preparacion fiscal corporativa, contabilidad de pequenas empresas y nomina.
+- "irs-tax-resolution" maneja avisos del IRS, deudas pendientes, sanciones y problemas de cumplimiento.
+- Preguntas sobre impuestos, renta, expat, FBAR, contabilidad, nomina, IRS, avisos, deudas, resolucion o business accounting DEBEN seleccionar al menos un agente.
+- Solo devuelve un array vacio para charla pura (saludos, "hola", "gracias", emojis) sin ninguna intencion de servicio.
+- Nunca inventes ids. Responde en castellano de Espana.`,
 };
 
 export type RouteArgs = {
@@ -121,7 +117,7 @@ export type RouteArgs = {
    * Optional structured logger. When omitted the orchestrator falls
    * back to the process-wide default (silent in tests, info otherwise).
    * Note: when an explicit `warn` callback is provided it still wins
-   * — that hook predates the structured logger and is used by tests
+   * - that hook predates the structured logger and is used by tests
    * to capture orchestrator-level warnings.
    */
   logger?: Logger;
@@ -215,7 +211,7 @@ export async function route(args: RouteArgs): Promise<OrchestratorDecision> {
 }
 
 /**
- * Pure, testable keyword → agent-id mapping. Scans the user message
+ * Pure, testable keyword to agent-id mapping. Scans the user message
  * (lowercased) for any of the substrings in `KEYWORD_FALLBACK` and
  * returns the de-duplicated, known agent ids, preserving the first
  * occurrence order from the keyword table. Unknown ids are dropped.

@@ -10,14 +10,14 @@ import type {
   OllamaClient,
 } from '../../src/ollama/interface.js';
 
-function makeAgent(id: string): AgentDef {
+function makeAgent(id: string, tools: string[] = []): AgentDef {
   return {
     id,
     name: id,
     description: `${id} desc`,
     systemPrompt: `system ${id}`,
     system_prompt: `system ${id}`,
-    tools: [],
+    tools,
     tags: [],
     body: '',
     filePath: `${id}.md`,
@@ -51,7 +51,7 @@ function makeClient(
       // (the real Ollama client has no way to know which agent called it).
       // The function is intentionally NOT async: the OllamaClient contract
       // returns AsyncIterable<string> directly, not Promise<AsyncIterable>.
-      const idMatch = /system (\w+)/.exec(req.system);
+      const idMatch = /system ([\w-]+)/.exec(req.system);
       const id = idMatch?.[1] ?? '';
       const value = streams[id];
       if (value instanceof Error) {
@@ -85,13 +85,13 @@ describe('runAgents (parallel runner)', () => {
 
   it('runs two agents in parallel and returns both as ok', async () => {
     const client = makeClient({
-      'advisory': delay(10, ['Advisory ', 'reply.']),
-      'valuation': delay(15, ['Valuation ', 'reply.']),
+      'income-tax': delay(10, ['Income tax ', 'reply.']),
+      'business-accounting': delay(15, ['Business accounting ', 'reply.']),
     });
     const sem = new Semaphore(2);
     const start = performance.now();
     const result = await runAgents({
-      selected: [makeAgent('advisory'), makeAgent('valuation')],
+      selected: [makeAgent('income-tax'), makeAgent('business-accounting')],
       history: [{ role: 'user', content: 'help' }],
       lang: 'en',
       conducta: makeConducta(),
@@ -104,15 +104,15 @@ describe('runAgents (parallel runner)', () => {
     });
     const elapsed = performance.now() - start;
     expect(result).toHaveLength(2);
-    expect(result.find((r) => r.id === 'advisory')).toMatchObject({
-      id: 'advisory',
+    expect(result.find((r) => r.id === 'income-tax')).toMatchObject({
+      id: 'income-tax',
       status: 'ok',
-      text: 'Advisory reply.',
+      text: 'Income tax reply.',
     });
-    expect(result.find((r) => r.id === 'valuation')).toMatchObject({
-      id: 'valuation',
+    expect(result.find((r) => r.id === 'business-accounting')).toMatchObject({
+      id: 'business-accounting',
       status: 'ok',
-      text: 'Valuation reply.',
+      text: 'Business accounting reply.',
     });
     // parallel: total < sum(individual) so we verify with a margin
     expect(elapsed).toBeLessThan(200);
@@ -120,12 +120,12 @@ describe('runAgents (parallel runner)', () => {
 
   it('marks one agent as TIMEOUT when it exceeds 30s and keeps the other as ok', async () => {
     const client = makeClient({
-      'advisory': delay(5, ['quick']),
-      'valuation': hang(),
+      'income-tax': delay(5, ['quick']),
+      'irs-tax-resolution': hang(),
     });
     const sem = new Semaphore(2);
     const result = await runAgents({
-      selected: [makeAgent('advisory'), makeAgent('valuation')],
+      selected: [makeAgent('income-tax'), makeAgent('irs-tax-resolution')],
       history: [{ role: 'user', content: 'help' }],
       lang: 'en',
       conducta: makeConducta(),
@@ -136,11 +136,11 @@ describe('runAgents (parallel runner)', () => {
       timeoutMs: 30, // tiny for test
       semaphore: sem,
     });
-    const advisory = result.find((r) => r.id === 'advisory');
-    const valuation = result.find((r) => r.id === 'valuation');
-    expect(advisory).toMatchObject({ id: 'advisory', status: 'ok', text: 'quick' });
-    expect(valuation).toMatchObject({
-      id: 'valuation',
+    const incomeTax = result.find((r) => r.id === 'income-tax');
+    const irsTaxResolution = result.find((r) => r.id === 'irs-tax-resolution');
+    expect(incomeTax).toMatchObject({ id: 'income-tax', status: 'ok', text: 'quick' });
+    expect(irsTaxResolution).toMatchObject({
+      id: 'irs-tax-resolution',
       status: 'error',
       error: { code: 'TIMEOUT' },
       durationMs: 30,
@@ -154,7 +154,7 @@ describe('runAgents (parallel runner)', () => {
   it('marks the agent as ABORTED when the outer signal aborts mid-stream (R8)', async () => {
     const ctl = new AbortController();
     const client = makeClient({
-      'advisory': (async function* () {
+      'business-accounting': (async function* () {
         await new Promise((r) => setTimeout(r, 5));
         yield 'partial-';
         await new Promise((r) => setTimeout(r, 200));
@@ -163,7 +163,7 @@ describe('runAgents (parallel runner)', () => {
     });
     const sem = new Semaphore(2);
     const runPromise = runAgents({
-      selected: [makeAgent('advisory')],
+      selected: [makeAgent('business-accounting')],
       history: [{ role: 'user', content: 'help' }],
       lang: 'en',
       conducta: makeConducta(),
@@ -176,17 +176,17 @@ describe('runAgents (parallel runner)', () => {
     });
     setTimeout(() => ctl.abort(), 30);
     const result = await runPromise;
-    expect(result[0].id).toBe('advisory');
+    expect(result[0].id).toBe('business-accounting');
     expect(result[0].status).toMatch(/ok|error/);
   });
 
   it('emits per-agent OLLAMA_ERROR when the stream throws a non-abort error', async () => {
     const client = makeClient({
-      'advisory': new Error('upstream blew up'),
+      'income-tax': new Error('upstream blew up'),
     });
     const sem = new Semaphore(2);
     const result = await runAgents({
-      selected: [makeAgent('advisory')],
+      selected: [makeAgent('income-tax')],
       history: [{ role: 'user', content: 'help' }],
       lang: 'en',
       conducta: makeConducta(),
@@ -198,7 +198,7 @@ describe('runAgents (parallel runner)', () => {
       semaphore: sem,
     });
     expect(result[0]).toMatchObject({
-      id: 'advisory',
+      id: 'income-tax',
       status: 'error',
       error: { code: 'OLLAMA_ERROR' },
     });
@@ -206,14 +206,14 @@ describe('runAgents (parallel runner)', () => {
 
   it('respects the semaphore by serializing two runAgents calls when cap is 1', async () => {
     const client = makeClient({
-      'advisory': delay(30, ['A']),
-      'valuation': delay(30, ['V']),
+      'income-tax': delay(30, ['A']),
+      'business-accounting': delay(30, ['B']),
     });
     const sem = new Semaphore(1);
     const start = performance.now();
     const [r1, r2] = await Promise.all([
       runAgents({
-        selected: [makeAgent('advisory')],
+        selected: [makeAgent('income-tax')],
         history: [{ role: 'user', content: 'help' }],
         lang: 'en',
         conducta: makeConducta(),
@@ -225,7 +225,7 @@ describe('runAgents (parallel runner)', () => {
         semaphore: sem,
       }),
       runAgents({
-        selected: [makeAgent('valuation')],
+        selected: [makeAgent('business-accounting')],
         history: [{ role: 'user', content: 'help' }],
         lang: 'en',
         conducta: makeConducta(),
@@ -242,5 +242,37 @@ describe('runAgents (parallel runner)', () => {
     expect(r2).toHaveLength(1);
     // cap=1 ⇒ the second runAgents is blocked on the first; total ≥ 60ms
     expect(elapsed).toBeGreaterThanOrEqual(55);
+  });
+
+  it('passes only skills listed in the selected agent tools', async () => {
+    let capturedSystem = '';
+    const client: OllamaClient = {
+      chatOnce: vi.fn(async () => ({ content: '' })),
+      chatStream(req: OllamaChatStreamRequest): AsyncIterable<string> {
+        capturedSystem = req.system;
+        return delay(0, ['ok']);
+      },
+      checkModel: vi.fn(async () => undefined),
+    };
+    const sem = new Semaphore(2);
+
+    await runAgents({
+      selected: [makeAgent('income-tax', ['income-tax-preparation'])],
+      history: [{ role: 'user', content: 'help' }],
+      lang: 'en',
+      conducta: makeConducta(),
+      skills: [
+        { id: 'income-tax-preparation', name: 'Income', description: 'Income skill', tags: [], body: '', filePath: 'income.md' },
+        { id: 'payroll', name: 'Payroll', description: 'Payroll skill', tags: [], body: '', filePath: 'payroll.md' },
+      ],
+      client,
+      signal: new AbortController().signal,
+      requestId: 'r6',
+      timeoutMs: 2000,
+      semaphore: sem,
+    });
+
+    expect(capturedSystem).toContain('- income-tax-preparation: Income skill');
+    expect(capturedSystem).not.toContain('payroll');
   });
 });
