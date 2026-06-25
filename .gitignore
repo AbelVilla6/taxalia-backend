@@ -6,7 +6,6 @@
 node_modules/
 
 # build/test output
-dist/
 coverage/
 
 # local SQLite content database (lives on a persistent volume in prod)

@@ -1,0 +1,92 @@
+import { existsSync } from 'node:fs';
+import { z } from 'zod';
+import { DEFAULT_LOCAL_MODEL, DEFAULT_PRODUCTION_MODEL } from './ollama/models.js';
+const EnvSchema = z.object({
+    OLLAMA_HOST: z.string().url().optional(),
+    OLLAMA_API_KEY: z.string().optional(),
+    OLLAMA_MODEL: z.string().optional(),
+    PORT: z.coerce.number().int().positive().default(4324),
+    OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+    SMTP_HOST: z.string().trim().min(1).optional(),
+    SMTP_PORT: z.coerce.number().int().positive().default(587),
+    SMTP_SECURE: envBoolean(false),
+    SMTP_USER: z.string().trim().min(1).optional(),
+    SMTP_PASS: z.string().trim().min(1).optional(),
+    CONTACT_EMAIL_TO: z.string().email().default('info@lbglobaltax.com'),
+    CONTACT_EMAIL_FROM: z
+        .string()
+        .trim()
+        .min(1)
+        .default('info@lbglobaltax.com'),
+    CONTACT_EMAIL_SUBJECT_PREFIX: z.string().trim().min(1).default('[LB&Co Contact]'),
+    CORS_ALLOWED_ORIGINS: z
+        .string()
+        .default('http://localhost:4321,http://localhost:4322'),
+    LOG_LEVEL: z
+        .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+        .default('info'),
+    DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
+    BLOG_DB_PATH: z.string().default('./data/blog.db'),
+    SKIP_OLLAMA_CHECK: envBoolean(false),
+    ADMIN_USERNAME: z.string().default('admin'),
+    ADMIN_PASSWORD: z.string().default('change-me-now'),
+    SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
+    UPLOAD_DIR: z.string().default('./data/uploads'),
+    CALCOM_URL: z.string().url().default('https://cal.com/lb-co-global-advisors'),
+    FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
+    BACKEND_PUBLIC_URL: z.string().url().optional(),
+});
+export function loadConfig(source = process.env) {
+    loadDotEnvIfNeeded(source);
+    const parsed = EnvSchema.safeParse(source);
+    if (!parsed.success) {
+        const issues = parsed.error.issues
+            .map((i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`)
+            .join('\n');
+        throw new Error(`Invalid environment configuration:\n${issues}`);
+    }
+    return {
+        ...parsed.data,
+        OLLAMA_HOST: parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
+        OLLAMA_MODEL: parsed.data.OLLAMA_MODEL ?? defaultOllamaModel(source.NODE_ENV),
+    };
+}
+function loadDotEnvIfNeeded(source) {
+    if (source !== process.env)
+        return;
+    if (!existsSync('.env'))
+        return;
+    if (typeof process.loadEnvFile !== 'function')
+        return;
+    process.loadEnvFile('.env');
+}
+function defaultOllamaHost(nodeEnv) {
+    return nodeEnv === 'production'
+        ? 'https://ollama.com/api'
+        : 'http://127.0.0.1:11434/api';
+}
+function defaultOllamaModel(nodeEnv) {
+    return nodeEnv === 'production' ? DEFAULT_PRODUCTION_MODEL : DEFAULT_LOCAL_MODEL;
+}
+export function corsAllowlist(env) {
+    return env.CORS_ALLOWED_ORIGINS.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+function envBoolean(defaultValue) {
+    return z
+        .union([z.boolean(), z.string()])
+        .optional()
+        .transform((value) => {
+        if (value === undefined || value === null || value === '')
+            return defaultValue;
+        if (typeof value === 'boolean')
+            return value;
+        const normalized = value.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'on'].includes(normalized))
+            return true;
+        if (['0', 'false', 'no', 'off'].includes(normalized))
+            return false;
+        return Boolean(value);
+    });
+}
