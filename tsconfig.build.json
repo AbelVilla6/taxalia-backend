@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "outDir": "dist",
+    "rootDir": "src",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "target": "ES2023",
