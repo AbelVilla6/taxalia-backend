@@ -5,52 +5,269 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Taxalia · Panel de contenido</title>
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
     <style>
+      /* ── Design tokens ─────────────────────────────── */
       :root {
-        --bg: #f8f4ef; --surface: #fff; --ink: #2b2522; --muted: #93867d;
-        --primary: #4c362d; --accent: #c8a15a; --border: rgba(76, 54, 45, 0.16);
+        --bg: #f5f0ea;
+        --surface: #fff;
+        --surface-soft: #faf6f0;
+        --ink: #2b2522;
+        --muted: #93867d;
+        --primary: #4c362d;
+        --primary-light: #6b4e41;
+        --accent: #c8a15a;
+        --accent-soft: rgba(200,161,90,0.15);
+        --border: rgba(76,54,45,0.15);
+        --border-focus: rgba(76,54,45,0.45);
         --danger: #8b3f35;
+        --ok: #2f5a40;
+        --ok-bg: rgba(73,107,85,0.1);
+        --radius-sm: 0.45rem;
+        --radius: 0.7rem;
+        --radius-pill: 999px;
+        --shadow-sm: 0 2px 8px rgba(76,54,45,0.08);
+        --shadow: 0 4px 18px rgba(76,54,45,0.12);
       }
-      * { box-sizing: border-box; }
+
+      /* ── Reset ─────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
       body {
-        margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        background: var(--bg); color: var(--ink);
+        margin: 0;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-size: 0.9375rem;
+        line-height: 1.55;
+        background: var(--bg);
+        color: var(--ink);
       }
-      header {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 0.9rem 1.5rem; background: var(--primary); color: #fff;
-      }
-      header b { letter-spacing: 0.08em; text-transform: uppercase; }
-      main { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
-      button {
-        font: inherit; cursor: pointer; border: 0; border-radius: 999px;
-        padding: 0.5rem 1rem; background: var(--primary); color: #fff;
-      }
-      button.ghost { background: transparent; color: var(--primary); border: 1px solid var(--border); }
-      button.danger { background: var(--danger); }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
-      input, select {
-        font: inherit; width: 100%; padding: 0.55rem 0.7rem;
-        border: 1px solid var(--border); border-radius: 0.5rem; background: #fff;
-      }
-      label { display: block; font-size: 0.8rem; font-weight: 700; margin: 0.8rem 0 0.25rem; color: var(--primary); }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-      table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 0.6rem; overflow: hidden; }
-      th, td { text-align: left; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
-      th { background: #efe7dc; }
-      .pill { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; background: #efe7dc; }
-      .pill.draft { background: #f3e0c8; color: #7a5b1e; }
-      .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
-      .card { background: var(--surface); border: 1px solid var(--border); border-radius: 0.8rem; padding: 1.25rem; }
-      .login { max-width: 360px; margin: 4rem auto; }
-      .msg { padding: 0.6rem 0.8rem; border-radius: 0.5rem; margin: 0.5rem 0; font-size: 0.85rem; }
-      .msg.err { background: rgba(139,63,53,0.1); color: var(--danger); }
-      .msg.ok { background: rgba(73,107,85,0.12); color: #2f5a40; }
-      .actions { display: flex; gap: 0.4rem; }
-      .uploader { display: flex; gap: 0.5rem; align-items: center; }
-      small { color: var(--muted); }
       [hidden] { display: none !important; }
 
+      /* ── Header ────────────────────────────────────── */
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.5rem;
+        height: 3.25rem;
+        background: var(--primary);
+        color: #fff;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: var(--shadow);
+      }
+      .app-header-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-size: 0.8rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #fff;
+      }
+      .app-header-brand span {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      /* ── Main layout ───────────────────────────────── */
+      main { max-width: 1180px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
+
+      /* ── Buttons ───────────────────────────────────── */
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: none;
+        border-radius: var(--radius-pill);
+        padding: 0.5rem 1.1rem;
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        background: var(--primary);
+        color: #fff;
+        transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
+      }
+      button:hover:not(:disabled) { filter: brightness(1.12); box-shadow: var(--shadow-sm); }
+      button:active:not(:disabled) { transform: translateY(1px); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.ghost {
+        background: transparent;
+        color: var(--primary);
+        border: 1.5px solid var(--border);
+      }
+      button.ghost:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+      button.accent {
+        background: linear-gradient(135deg, var(--primary), var(--primary-light));
+        box-shadow: 0 4px 14px rgba(76,54,45,0.2);
+      }
+      button.danger { background: var(--danger); }
+      button.icon-btn {
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 1rem;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ── Form controls ─────────────────────────────── */
+      input:not([type]), input[type="text"], input[type="email"],
+      input[type="date"], input[type="url"], input[type="password"],
+      select, textarea {
+        font: inherit;
+        font-size: 0.9rem;
+        width: 100%;
+        padding: 0.6rem 0.85rem;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--ink);
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px rgba(76,54,45,0.1);
+      }
+      label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--primary);
+        margin: 0.9rem 0 0.3rem;
+      }
+      label.inline {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-direction: row;
+        text-transform: none;
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: 0;
+        color: var(--ink);
+        margin-top: 1rem;
+        cursor: pointer;
+      }
+      input[type="checkbox"] { width: auto; accent-color: var(--primary); }
+      small { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
+
+      /* ── Grid helpers ──────────────────────────────── */
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+      .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+      @media (max-width: 640px) { .row, .row-3 { grid-template-columns: 1fr; } }
+
+      /* ── Card ──────────────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+      }
+
+      /* ── Messages ──────────────────────────────────── */
+      .msg {
+        padding: 0.65rem 0.9rem;
+        border-radius: var(--radius-sm);
+        margin: 0.6rem 0;
+        font-size: 0.85rem;
+        font-weight: 500;
+        animation: fadeIn 0.2s ease;
+      }
+      .msg.err { background: rgba(139,63,53,0.1); color: var(--danger); border-left: 3px solid var(--danger); }
+      .msg.ok  { background: var(--ok-bg); color: var(--ok); border-left: 3px solid var(--ok); }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+      /* ── Pills ─────────────────────────────────────── */
+      .pill {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        padding: 0.15rem 0.6rem;
+        border-radius: var(--radius-pill);
+        background: #ede4d9;
+        color: var(--primary);
+      }
+      .pill.draft { background: #f3e0c8; color: #7a5b1e; }
+      .pill.en    { background: rgba(76,54,45,0.08); }
+
+      /* ── Toolbar ───────────────────────────────────── */
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .toolbar-actions { display: flex; gap: 0.5rem; align-items: center; }
+      .toolbar h2 { margin: 0; font-size: 1.3rem; font-weight: 700; }
+
+      /* ── Table ─────────────────────────────────────── */
+      .table-wrap {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+      }
+      table { width: 100%; border-collapse: collapse; }
+      th, td {
+        text-align: left;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.875rem;
+      }
+      th {
+        background: var(--surface-soft);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--primary);
+      }
+      tr:last-child td { border-bottom: none; }
+      tr:hover td { background: rgba(76,54,45,0.02); }
+      td.actions { display: flex; gap: 0.35rem; }
+
+      /* ── Login ─────────────────────────────────────── */
+      .login-wrap {
+        max-width: 380px;
+        margin: 4rem auto;
+      }
+      .login-logo {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+      .login-logo strong {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--primary);
+      }
+      .login-logo span {
+        font-size: 0.78rem;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+      }
+
+      /* ── Uploader row ──────────────────────────────── */
+      .uploader { display: flex; gap: 0.5rem; align-items: stretch; }
+      .uploader input { flex: 1; }
       /* ---- Content editor ---- */
       .content-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 0.4rem; }
       .content-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -70,36 +287,220 @@
         font-size: 0.82rem; line-height: 1.5;
       }
 
-      #f-bodyMd {
-        width: 100%; min-height: 520px; padding: 0.85rem 0.9rem; resize: vertical;
-        border: 1px solid var(--border); border-radius: 0.6rem; background: #fff;
-        color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        line-height: 1.6;
+      /* ── Section divider ───────────────────────────── */
+      .section-label {
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.4rem;
+        margin: 1.75rem 0 0.75rem;
       }
 
-      .site-preview { margin-top: 1rem; border: 1px solid var(--border); border-radius: 0.6rem; overflow: hidden; }
-      .site-preview > summary {
-        cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.75rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: #faf6f0;
+      /* ── Editor actions row ────────────────────────── */
+      .editor-save-row {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        margin-top: 1.5rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
       }
-      #preview-frame { width: 100%; height: 420px; border: 0; background: var(--bg); display: block; }
+
+      /* ── Write / Preview tabs (native Toast UI look, injected in toolbar) ── */
+      .taxalia-tab-container {
+        background: var(--surface-soft);
+        padding: 8px 10px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .taxalia-tab-container .tab-item {
+        display: inline-block;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: var(--muted);
+        padding: 0.45rem 1.15rem;
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: 8px 8px 0 0;
+        margin-bottom: -1px;
+        user-select: none;
+        transition: color 0.15s, background 0.15s;
+      }
+      .taxalia-tab-container .tab-item:hover { color: var(--primary); }
+      .taxalia-tab-container .tab-item.active {
+        background: var(--surface);
+        border-color: var(--border);
+        border-bottom: 1px solid var(--surface);
+        color: var(--primary);
+      }
+
+      /* Preview pane (iframe keeps published-article CSS isolated) */
+      .taxalia-preview-frame {
+        display: block;
+        width: 100%;
+        border: 0;
+        background: var(--bg);
+      }
+
+      /* Toolbar buttons dimmed while previewing */
+      .toastui-editor-defaultUI-toolbar.is-preview-disabled {
+        pointer-events: none;
+        opacity: 0.45;
+      }
+
+      /* Let the toolbar grow to fit the injected tab row + buttons row */
+      .toastui-editor-defaultUI .toastui-editor-toolbar { height: auto !important; }
+
+      /* ── Custom toolbar buttons ────────────────────── */
+      .tui-media-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
+        color: #444;
+        font-size: 15px;
+        transition: background 0.12s;
+      }
+      .tui-media-btn:hover { background: rgba(76,54,45,0.1); color: var(--primary); }
+      .tui-media-btn svg { display: block; }
+
+      /* ── Toast UI Editor overrides ─────────────────── */
+      .toastui-editor-defaultUI {
+        border: 1.5px solid var(--border) !important;
+        border-radius: var(--radius) !important;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        font-family: inherit !important;
+      }
+      .toastui-editor-toolbar {
+        background: var(--surface-soft) !important;
+        border-bottom: 1px solid var(--border) !important;
+        padding: 4px 8px !important;
+      }
+      .toastui-editor-toolbar-group button:hover,
+      .toastui-editor-toolbar-group button.active {
+        background: var(--accent-soft) !important;
+        color: var(--primary) !important;
+      }
+      .toastui-editor-contents,
+      .toastui-editor .ProseMirror {
+        font-family: inherit !important;
+        font-size: 0.9375rem !important;
+        color: var(--ink) !important;
+        line-height: 1.7 !important;
+        padding: 1rem 1.25rem !important;
+      }
+      .toastui-editor-md-preview {
+        background: var(--surface-soft) !important;
+        padding: 1rem 1.25rem !important;
+        font-family: inherit !important;
+        font-size: 0.9375rem !important;
+        color: var(--ink) !important;
+        line-height: 1.7 !important;
+      }
+      .toastui-editor-md-splitter { background: var(--border) !important; }
+      .toastui-editor-tabs .tab-item {
+        font-family: inherit !important;
+        color: var(--muted) !important;
+        background: var(--surface-soft) !important;
+        border-color: var(--border) !important;
+      }
+      .toastui-editor-tabs .tab-item.active {
+        color: var(--primary) !important;
+        background: var(--surface) !important;
+        border-bottom-color: var(--surface) !important;
+        font-weight: 700 !important;
+      }
+      .toastui-editor-tabs .tab-item:hover { color: var(--primary) !important; }
+      .toastui-editor-popup {
+        border: 1px solid var(--border) !important;
+        border-radius: var(--radius-sm) !important;
+        box-shadow: var(--shadow) !important;
+      }
+      .toastui-editor-popup-body input,
+      .toastui-editor-popup-body select {
+        border: 1.5px solid var(--border) !important;
+        border-radius: var(--radius-sm) !important;
+        font-family: inherit !important;
+      }
+      .toastui-editor-popup-body input:focus {
+        border-color: var(--border-focus) !important;
+        box-shadow: 0 0 0 3px rgba(76,54,45,0.1) !important;
+        outline: none !important;
+      }
+      .toastui-editor-ok-button {
+        background: var(--primary) !important;
+        border-radius: var(--radius-pill) !important;
+        font-family: inherit !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em !important;
+        border: none !important;
+      }
+      .toastui-editor-cancel-button {
+        border-radius: var(--radius-pill) !important;
+        font-family: inherit !important;
+        font-weight: 600 !important;
+        color: var(--primary) !important;
+        border-color: var(--border) !important;
+      }
+      .toastui-editor-ww-code-block,
+      .toastui-editor-contents code {
+        background: rgba(76,54,45,0.06) !important;
+        color: var(--primary) !important;
+        font-size: 0.875em !important;
+      }
+      .toastui-editor-contents blockquote {
+        border-left-color: var(--accent) !important;
+        background: var(--accent-soft) !important;
+      }
+      .toastui-editor-contents h1,
+      .toastui-editor-contents h2,
+      .toastui-editor-contents h3 { color: var(--primary) !important; }
+      .toastui-editor-contents a { color: var(--primary-light) !important; }
+      .toastui-editor-contents a:hover { color: var(--accent) !important; }
     </style>
   </head>
   <body>
-    <header>
-      <b>Taxalia · Contenido</b>
-      <button id="logout" class="ghost" hidden>Salir</button>
+
+    <!-- ══════════ HEADER ══════════ -->
+    <header class="app-header">
+      <div class="app-header-brand">
+        <span></span>
+        Taxalia &middot; Contenido
+      </div>
+      <button id="logout" class="ghost" hidden style="color:#fff;border-color:rgba(255,255,255,0.3);">
+        Salir
+      </button>
     </header>
+
     <main>
-      <!-- LOGIN -->
-      <section id="view-login" class="card login" hidden>
-        <h2>Acceso</h2>
-        <div id="login-msg"></div>
-        <label>Usuario</label>
-        <input id="login-user" autocomplete="username" />
-        <label>Contraseña</label>
-        <input id="login-pass" type="password" autocomplete="current-password" />
-        <div style="margin-top:1rem"><button id="login-btn">Entrar</button></div>
+
+      <!-- ══════════ LOGIN ══════════ -->
+      <section id="view-login" hidden>
+        <div class="login-wrap card">
+          <div class="login-logo">
+            <strong>Taxalia</strong>
+            <span>Panel de administración</span>
+          </div>
+          <div id="login-msg"></div>
+          <label>Usuario</label>
+          <input id="login-user" autocomplete="username" />
+          <label>Contraseña</label>
+          <input id="login-pass" type="password" autocomplete="current-password" />
+          <div style="margin-top:1.25rem">
+            <button id="login-btn" class="accent" style="width:100%">Entrar</button>
+          </div>
+        </div>
       </section>
 
       <!-- FORCED PASSWORD CHANGE -->
@@ -119,24 +520,37 @@
       <!-- LIST -->
       <section id="view-list" hidden>
         <div class="toolbar">
-          <h2 style="margin:0">Artículos</h2>
-          <button id="new-btn">+ Nuevo artículo</button>
+          <h2>Artículos</h2>
+          <button id="new-btn" class="accent">+ Nuevo artículo</button>
         </div>
-        <table>
-          <thead><tr><th>Título</th><th>Idioma</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
-          <tbody id="list-body"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Título</th>
+                <th>Idioma</th>
+                <th>Estado</th>
+                <th>Fecha</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="list-body"></tbody>
+          </table>
+        </div>
       </section>
 
-      <!-- EDITOR -->
+      <!-- ══════════ EDITOR ══════════ -->
       <section id="view-editor" class="card" hidden>
         <div class="toolbar">
           <h2 id="editor-title" style="margin:0">Nuevo artículo</h2>
           <button class="ghost" id="back-btn">← Volver</button>
         </div>
+
         <div id="editor-msg"></div>
         <input type="hidden" id="f-id" />
 
+        <!-- Meta fields -->
+        <p class="section-label">Información del artículo</p>
         <div class="lang-tabs">
           <button type="button" class="lang-tab is-active" data-lang="es">Español</button>
           <button type="button" class="lang-tab" data-lang="en">English</button>
@@ -144,32 +558,55 @@
         </div>
 
         <div class="row">
-          <div><label>Título</label><input id="f-title" /></div>
-          <div><label>Slug (URL)</label><input id="f-slug" placeholder="mi-articulo" /></div>
+          <div><label>Título</label><input id="f-title" placeholder="Título del artículo" /></div>
+          <div><label>Slug <small>(URL)</small></label><input id="f-slug" placeholder="mi-articulo" /></div>
         </div>
+        <div class="row">
+          <div>
+            <label>Idioma</label>
+            <select id="f-lang">
+              <option value="es">Español (es)</option>
+              <option value="en">English (en)</option>
+            </select>
+          </div>
+          <div>
+            <label>Clave de traducción <small>(enlaza es/en)</small></label>
+            <input id="f-tkey" placeholder="mi-articulo" />
+          </div>
+        </div>
+        <label>Descripción <small>(para SEO y listados)</small></label>
+        <input id="f-description" placeholder="Breve descripción del artículo" />
+
+        <p class="section-label">Autoría y etiquetas</p>
         <label>ID del grupo de traducción <small>(enlaza es/en)</small></label>
         <input id="f-tkey" placeholder="mi-articulo" />
         <label>Descripción</label>
         <input id="f-description" />
         <div class="row">
           <div><label>Autor</label><input id="f-author" value="Taxalia" /></div>
-          <div><label>Tags <small>(separados por coma)</small></label><input id="f-tags" /></div>
+          <div>
+            <label>Tags <small>(separados por coma)</small></label>
+            <input id="f-tags" placeholder="impuestos, asesoría, expat" />
+          </div>
         </div>
         <div class="row">
-          <div><label>Fecha publicación</label><input id="f-pubDate" type="date" /></div>
-          <div><label>Fecha actualización <small>(opcional)</small></label><input id="f-updatedDate" type="date" /></div>
+          <div><label>Fecha de publicación</label><input id="f-pubDate" type="date" /></div>
+          <div><label>Fecha de actualización <small>(opcional)</small></label><input id="f-updatedDate" type="date" /></div>
         </div>
-        <label>Imagen de portada (URL)</label>
+
+        <p class="section-label">Imagen de portada</p>
+        <label>URL de portada</label>
         <div class="uploader">
           <input id="f-heroImage" placeholder="/uploads/..." />
-          <button class="ghost" type="button" id="hero-upload">Subir</button>
+          <button class="ghost" type="button" id="hero-upload">↑ Subir</button>
         </div>
         <label>Texto alternativo de portada</label>
-        <input id="f-heroAlt" />
-        <label style="display:flex;align-items:center;gap:0.5rem;flex-direction:row;margin-top:1rem">
-          <input id="f-draft" type="checkbox" style="width:auto" /> Borrador (no se publica)
-        </label>
+        <input id="f-heroAlt" placeholder="Descripción de la imagen para accesibilidad" />
 
+        <label class="inline" style="margin-top:1rem">
+          <input id="f-draft" type="checkbox" style="width:auto" />
+          Borrador <small style="font-weight:400">(no se publica hasta que se desmarque)</small>
+        </label>
         <!-- Content: rich text editor (WYSIWYG + Markdown toggle) -->
         <div class="content-head">
           <label style="margin:0">Contenido</label>
@@ -183,19 +620,25 @@
         <label>JSON-LD personalizado <small>(opcional; p. ej. FAQPage. Se publica junto al Article generado)</small></label>
         <textarea id="f-jsonld" spellcheck="false" placeholder='{"@context": "...", "@type": "FAQPage", "mainEntity": [...]}'></textarea>
 
-        <details class="site-preview" open>
-          <summary>Vista previa · como se verá publicado en el sitio</summary>
-          <iframe id="preview-frame" title="Vista previa del sitio"></iframe>
-        </details>
+        <!-- WYSIWYG content editor (Write/Preview tabs injected into its toolbar) -->
+        <p class="section-label">Contenido del artículo</p>
+        <div id="editor-mount"></div>
 
-        <div style="margin-top:1rem;display:flex;gap:0.5rem">
-          <button id="save-btn">Guardar</button>
-          <button class="danger" id="delete-btn" hidden>Eliminar</button>
+        <div class="editor-save-row">
+          <button id="save-btn" class="accent">Guardar artículo</button>
+          <button class="danger" id="delete-btn" hidden>Eliminar artículo</button>
         </div>
       </section>
+
     </main>
 
-    <input type="file" id="file-picker" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4" hidden />
+    <!-- Hidden file picker (shared) -->
+    <input type="file" id="file-picker"
+      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
+      hidden />
+
+    <!-- Toast UI Editor -->
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
     <script src="/admin/app.js"></script>
   </body>
 </html>

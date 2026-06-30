@@ -35,13 +35,11 @@ async function uploadFile(file) {
   if (!res.ok) throw new Error(data?.error ?? String(res.status));
   return data.url;
 }
-
 // ---- Auth ----
 async function enterPanel() {
   await loadList();
   show('list');
 }
-
 async function checkSession() {
   const { ok, data } = await api('/me');
   if (!ok) { show('login'); return; }
@@ -51,6 +49,8 @@ async function checkSession() {
 
 $('login-btn').addEventListener('click', async () => {
   msg($('login-msg'), '', '');
+  $('login-btn').disabled = true;
+  $('login-btn').textContent = 'Entrando…';
   const username = $('login-user').value.trim();
   const password = $('login-pass').value;
   const { ok, data } = await api('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
@@ -98,20 +98,27 @@ $('logout').addEventListener('click', async () => {
   show('login');
 });
 
-// ---- List ----
+// ── List ──────────────────────────────────────────────────────────────────────
 async function loadList() {
   const { data } = await api('/posts');
   const body = $('list-body');
   body.innerHTML = '';
-  for (const p of data?.posts ?? []) {
+  const posts = data?.posts ?? [];
+  if (posts.length === 0) {
+    body.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:2rem">Sin artículos todavía</td></tr>';
+    return;
+  }
+  for (const p of posts) {
     const tr = document.createElement('tr');
+
     const titleCell = document.createElement('td');
+    titleCell.style.fontWeight = '600';
     titleCell.textContent = p.title;
 
     const langCell = document.createElement('td');
     const langPill = document.createElement('span');
-    langPill.className = 'pill';
-    langPill.textContent = p.lang;
+    langPill.className = p.lang === 'en' ? 'pill en' : 'pill';
+    langPill.textContent = p.lang.toUpperCase();
     langCell.appendChild(langPill);
 
     const statusCell = document.createElement('td');
@@ -121,6 +128,7 @@ async function loadList() {
     statusCell.appendChild(statusPill);
 
     const dateCell = document.createElement('td');
+    dateCell.style.color = 'var(--muted)';
     dateCell.textContent = p.pubDate;
 
     const actionsCell = document.createElement('td');
@@ -137,6 +145,8 @@ async function loadList() {
     deleteBtn.type = 'button';
     deleteBtn.dataset.del = String(p.id);
     deleteBtn.textContent = 'Borrar';
+    deleteBtn.style.fontSize = '0.8rem';
+    deleteBtn.style.padding = '0.35rem 0.75rem';
 
     actionsCell.append(editBtn, deleteBtn);
     tr.append(titleCell, langCell, statusCell, dateCell, actionsCell);
@@ -165,49 +175,227 @@ const ed = {
   forms: { es: null, en: null },
 };
 
-const bodyEditor = $('f-bodyMd');
-const frame = $('preview-frame');
+// ── WYSIWYG Editor (Toast UI) ─────────────────────────────────────────────────
+let editor = null;
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function makeSvgBtn(title, svgPath, clickHandler) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.title = title;
+  btn.className = 'tui-media-btn';
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>`;
+  btn.addEventListener('click', clickHandler);
+  return btn;
 }
 
-function emptyForm(lang, base) {
-  return {
-    title: '',
-    slug: '',
-    lang,
-    translationGroupId: base?.translationGroupId ?? '',
-    description: '',
-    author: base?.author ?? 'Taxalia',
-    tags: [],
-    pubDate: base?.pubDate ?? today(),
-    updatedDate: base?.updatedDate ?? null,
-    heroImage: base?.heroImage ?? null,
-    heroAlt: null,
-    draft: base?.draft ?? false,
-    bodyMd: '',
-    jsonLd: '',
-  };
+function initEditor() {
+  if (editor) {
+    editor.destroy();
+    editor = null;
+  }
+
+  const mount = $('editor-mount');
+  mount.innerHTML = '';
+
+  // Custom toolbar elements
+  const btnFigure = makeSvgBtn(
+    'Insertar figura (imagen + pie de foto)',
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    () => { uploadTarget = 'figure'; $('file-picker').accept = 'image/jpeg,image/png,image/webp,image/gif'; $('file-picker').click(); }
+  );
+
+  const btnVideo = makeSvgBtn(
+    'Subir vídeo (MP4/WebM)',
+    '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+    () => { uploadTarget = 'video'; $('file-picker').accept = 'video/mp4,video/webm'; $('file-picker').click(); }
+  );
+
+  const btnYoutube = makeSvgBtn(
+    'Insertar vídeo de YouTube',
+    '<path d="M22.54 6.42A2.78 2.78 0 0 0 20.6 4.47C18.88 4 12 4 12 4s-6.88 0-8.6.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.4 19.53C5.12 20 12 20 12 20s6.88 0 8.6-.47a2.78 2.78 0 0 0 1.94-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>',
+    insertYouTube
+  );
+
+  editor = new toastui.Editor({
+    el: mount,
+    height: '560px',
+    initialEditType: 'wysiwyg',
+    previewStyle: 'tab',
+    usageStatistics: false,
+    toolbarItems: [
+      ['heading', 'bold', 'italic', 'strike'],
+      ['hr', 'quote'],
+      ['ul', 'ol', 'task'],
+      ['table', 'image', 'link'],
+      ['code', 'codeblock'],
+      [{ el: btnFigure }, { el: btnVideo }, { el: btnYoutube }],
+    ],
+    hooks: {
+      addImageBlobHook: async (blob, callback) => {
+        try {
+          const url = await uploadFile(blob);
+          callback(url, blob.name ?? 'imagen');
+          msg($('editor-msg'), 'Imagen subida: ' + url, 'ok');
+        } catch (err) {
+          msg($('editor-msg'), 'No se pudo subir la imagen: ' + err.message, 'err');
+        }
+      },
+    },
+  });
+
+  setupEditorTabs(mount);
 }
 
-function formFromApi(p) {
-  return {
-    title: p.title,
-    slug: p.slug,
-    lang: p.lang,
-    translationGroupId: p.translationGroupId,
-    description: p.description,
-    author: p.author,
-    tags: p.tags ?? [],
-    pubDate: (p.pubDate ?? today()).slice(0, 10),
-    updatedDate: p.updatedDate ? p.updatedDate.slice(0, 10) : null,
-    heroImage: p.heroImage,
-    heroAlt: p.heroAlt,
-    draft: !!p.draft,
-    bodyMd: p.bodyMd ?? '',
-    jsonLd: p.jsonLd ?? '',
+// ── Write / Preview tabs (injected into the Toast UI toolbar) ────────────────
+// Toast UI only renders its native Write/Preview tabs in Markdown mode, so we
+// inject an identical tab bar into the toolbar for WYSIWYG mode. The preview
+// renders in an iframe to keep the published-article CSS (preview.css)
+// isolated from the admin page styles.
+function setupEditorTabs(root) {
+  const toolbar = root.querySelector('.toastui-editor-toolbar');
+  const buttonsRow = root.querySelector('.toastui-editor-defaultUI-toolbar');
+  const mainArea = root.querySelector('.toastui-editor-main');
+  if (!toolbar || !buttonsRow || !mainArea) return;
+
+  const container = document.createElement('div');
+  container.className = 'taxalia-tab-container';
+
+  const tabs = document.createElement('div');
+  tabs.className = 'toastui-editor-tabs';
+
+  const tabWrite = document.createElement('div');
+  tabWrite.className = 'tab-item active';
+  tabWrite.textContent = 'Escribir';
+
+  const tabPreview = document.createElement('div');
+  tabPreview.className = 'tab-item';
+  tabPreview.textContent = 'Vista previa';
+
+  tabs.append(tabWrite, tabPreview);
+  container.appendChild(tabs);
+  toolbar.insertBefore(container, toolbar.firstChild);
+
+  const frame = document.createElement('iframe');
+  frame.className = 'taxalia-preview-frame';
+  frame.title = 'Vista previa del artículo';
+  frame.hidden = true;
+  mainArea.insertAdjacentElement('afterend', frame);
+
+  const showWrite = () => {
+    tabWrite.classList.add('active');
+    tabPreview.classList.remove('active');
+    mainArea.style.display = '';
+    frame.hidden = true;
+    buttonsRow.classList.remove('is-preview-disabled');
   };
+
+  const showPreview = async () => {
+    tabPreview.classList.add('active');
+    tabWrite.classList.remove('active');
+    frame.style.height = mainArea.offsetHeight + 'px';
+    mainArea.style.display = 'none';
+    frame.hidden = false;
+    buttonsRow.classList.add('is-preview-disabled');
+
+    const markdown = editor ? editor.getMarkdown() : '';
+    const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown }) });
+    const html = data?.html || '<p style="color:#93867d;font-style:italic">Sin contenido todavía…</p>';
+    frame.srcdoc =
+      '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
+      '<link rel="stylesheet" href="/admin/preview.css"></head>' +
+      '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
+  };
+
+  tabWrite.addEventListener('click', showWrite);
+  tabPreview.addEventListener('click', showPreview);
+
+  // In Markdown mode Toast UI shows its own native tabs — hide ours.
+  editor.on('changeMode', (mode) => {
+    container.style.display = mode === 'markdown' ? 'none' : '';
+    showWrite();
+  });
+}
+
+// ── File picker & upload targets ─────────────────────────────────────────────
+let uploadTarget = null; // 'hero' | 'figure' | 'video'
+
+$('hero-upload').addEventListener('click', () => {
+  uploadTarget = 'hero';
+  $('file-picker').accept = 'image/jpeg,image/png,image/webp,image/gif';
+  $('file-picker').click();
+});
+
+$('file-picker').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  let url;
+  try {
+    url = await uploadFile(file);
+  } catch (err) {
+    return msg($('editor-msg'), 'No se pudo subir el archivo: ' + err.message, 'err');
+  }
+
+  if (uploadTarget === 'hero') {
+    $('f-heroImage').value = url;
+    msg($('editor-msg'), 'Imagen de portada subida: ' + url, 'ok');
+    return;
+  }
+
+  if (!editor) return;
+
+  if (uploadTarget === 'figure') {
+    editor.insertText(
+      `\n<figure class="blog-media blog-media--wide">\n  <img src="${url}" alt="" loading="lazy">\n  <figcaption>Escribe aquí el pie de foto</figcaption>\n</figure>\n`
+    );
+  } else if (uploadTarget === 'video') {
+    editor.insertText(
+      `\n<figure class="blog-media blog-media--wide">\n  <video controls preload="metadata" class="blog-media-video">\n    <source src="${url}" type="${file.type}">\n  </video>\n  <figcaption>Escribe aquí el pie del vídeo</figcaption>\n</figure>\n`
+    );
+  }
+
+  msg($('editor-msg'), 'Archivo subido: ' + url, 'ok');
+});
+
+function insertYouTube() {
+  const input = window.prompt('URL de YouTube (ej: https://youtu.be/xxxxx o https://www.youtube.com/watch?v=xxxxx):');
+  if (!input) return;
+  const id = ytId(input);
+  if (!id) {
+    msg($('editor-msg'), 'No se pudo identificar el ID del vídeo de YouTube.', 'err');
+    return;
+  }
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${id}`;
+  editor.insertText(
+    `\n<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="${embedUrl}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption>Vídeo de YouTube</figcaption>\n</figure>\n`
+  );
+}
+
+function ytId(input) {
+  const m = String(input).match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
+  return m ? m[1] : null;
+}
+
+// ── Form helpers ──────────────────────────────────────────────────────────────
+function fillForm(p) {
+  $('f-id').value       = p?.id ?? '';
+  $('f-title').value    = p?.title ?? '';
+  $('f-slug').value     = p?.slug ?? '';
+  $('f-lang').value     = p?.lang ?? 'es';
+  $('f-tkey').value     = p?.translationKey ?? '';
+  $('f-description').value = p?.description ?? '';
+  $('f-author').value   = p?.author ?? 'Taxalia';
+  $('f-tags').value     = (p?.tags ?? []).join(', ');
+  $('f-pubDate').value  = (p?.pubDate ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+  $('f-updatedDate').value = p?.updatedDate ? p.updatedDate.slice(0, 10) : '';
+  $('f-heroImage').value = p?.heroImage ?? '';
+  $('f-heroAlt').value  = p?.heroAlt ?? '';
+  $('f-draft').checked  = !!p?.draft;
+
+  if (editor) {
+    editor.setMarkdown(p?.bodyMd ?? '');
+  }
 }
 
 function writeForm(f) {
@@ -241,25 +429,31 @@ function readForm() {
     heroImage: $('f-heroImage').value.trim() || null,
     heroAlt: $('f-heroAlt').value.trim() || null,
     draft: $('f-draft').checked,
-    bodyMd: bodyEditor.value,
-    jsonLd: $('f-jsonld').value.trim(),
+    bodyMd: editor ? editor.getMarkdown() : '',
   };
 }
 
-function setAutosaveStatus(text) {
-  $('autosave-status').textContent = text;
-}
-
-function renderTabs() {
-  document.querySelectorAll('.lang-tab').forEach((tab) => {
-    tab.classList.toggle('is-active', tab.dataset.lang === ed.activeLang);
-  });
-  $('delete-btn').hidden = ed.ids[ed.activeLang] == null;
-  $('translate-btn').textContent =
-    ed.activeLang === 'es' ? 'Traducir con IA → English' : 'Traducir con IA → Español';
-}
-
+// ── Editor open / save / delete ───────────────────────────────────────────────
 async function openEditor(id) {
+  msg($('editor-msg'), '', '');
+  initEditor();
+
+  if (id == null) {
+    $('editor-title').textContent = 'Nuevo artículo';
+    $('delete-btn').hidden = true;
+    fillForm(null);
+  } else {
+    const { ok, data } = await api('/posts/' + id);
+    if (!ok) return;
+    $('editor-title').textContent = 'Editar artículo';
+    $('delete-btn').hidden = false;
+    fillForm(data.post);
+  }
+
+  show('editor');
+}
+
+$('save-btn').addEventListener('click', async () => {
   msg($('editor-msg'), '', '');
   setAutosaveStatus('');
   ed.ids = { es: null, en: null };
@@ -298,6 +492,10 @@ async function openEditor(id) {
     }
     writeForm(ed.forms[post.lang]);
   }
+  $('save-btn').disabled = true;
+  $('save-btn').textContent = 'Guardando…';
+
+  const id = $('f-id').value;
   renderTabs();
   show('editor');
   renderPreview();
@@ -334,6 +532,18 @@ async function saveActive({ silent } = {}) {
     ? await api('/posts/' + id, { method: 'PUT', body: JSON.stringify(payload) })
     : await api('/posts', { method: 'POST', body: JSON.stringify(payload) });
 
+  $('save-btn').disabled = false;
+  $('save-btn').textContent = 'Guardar artículo';
+
+  if (ok) {
+    await loadList();
+    show('list');
+  } else if (status === 409) {
+    msg($('editor-msg'), 'Ya existe un artículo con ese slug en ese idioma.', 'err');
+  } else {
+    msg($('editor-msg'), 'No se pudo guardar (' + (data?.error ?? status) + ').', 'err');
+  }
+  
   if (ok) {
     if (!id && data?.id) ed.ids[ed.activeLang] = data.id;
     const time = new Date().toLocaleTimeString().slice(0, 5);
@@ -384,6 +594,16 @@ async function deletePost(id) {
   if (ok) { await loadList(); show('list'); }
 }
 
+
+$('f-title').addEventListener('input', () => {
+  if ($('f-id').value) return; // don't overwrite on edit
+  const slug = $('f-title').value
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  $('f-slug').value = slug;
+  if (!$('f-tkey').value) $('f-tkey').value = slug;
 // ---- Auto-match: parse a pasted document into form fields ----
 // Accepts a blob with a frontmatter-like header (title, slug, tags as * / -
 // bullets, etc.), free content, and an optional "## JSON-LD" section with a
@@ -596,9 +816,5 @@ $('file-picker').addEventListener('change', async (e) => {
   msg($('editor-msg'), 'Archivo subido: ' + url, 'ok');
 });
 
-function ytId(input) {
-  const m = String(input).match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
-  return m ? m[1] : String(input).trim();
-}
-
+// ── Boot ──────────────────────────────────────────────────────────────────────
 checkSession();
