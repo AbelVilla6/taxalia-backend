@@ -22,6 +22,8 @@ import { createOllamaClient } from './ollama/client.js';
 import { Semaphore } from './dispatch/semaphore.js';
 import { ColdStartGate } from './chat/coldStart.js';
 
+console.error('[BOOT] server.ts top-level');
+
 function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
     const origin = c.req.header('Origin');
@@ -240,65 +242,55 @@ function isMainEntry(): boolean {
   return entry.endsWith('server.ts') || entry.endsWith('server.js');
 }
 
-async function main(): Promise<void> {
+console.error('[BOOT] module loaded');
+
+async function main() {
+  console.error('[BOOT] main entered');
+
   const env = loadConfig();
-  const logger = createLogger(env.LOG_LEVEL);
-  const registry = createArtifactRegistry();
-  const client = createOllamaClient({
-    host: env.OLLAMA_HOST,
-    model: env.OLLAMA_MODEL,
-    apiKey: env.OLLAMA_API_KEY,
-    timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
+  console.error('[BOOT] config loaded', {
+    port: env.PORT,
+    skipOllama: env.SKIP_OLLAMA_CHECK,
   });
 
+  const logger = createLogger(env.LOG_LEVEL);
+  logger.info('[BOOT] 3 logger ready');
+
+  const registry = createArtifactRegistry();
+  console.log('[BOOT] 4 registry created');
+
+  const client = createOllamaClient({
+      host: env.OLLAMA_HOST,
+      model: env.OLLAMA_MODEL,
+      apiKey: env.OLLAMA_API_KEY,
+      timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
+  });
+  console.log('[BOOT] 5 client created');
+
   try {
-    await registry.reload();
+      console.log('[BOOT] 6 before registry.reload');
+      await registry.reload();
+      console.log('[BOOT] 7 registry reloaded');
   } catch (error) {
-    logger.fatal({ err: error }, 'artifact load failed at boot');
-    process.exit(1);
+      console.error('[BOOT] registry.reload failed', error);
   }
 
-  if (env.SKIP_OLLAMA_CHECK) {
-    logger.warn(
-      'SKIP_OLLAMA_CHECK is set: starting without Ollama. Chat will fail until Ollama is reachable; blog API is unaffected.',
-    );
-  }
-
-  try {
-    if (!env.SKIP_OLLAMA_CHECK) await client.checkModel();
-  } catch (err) {
-    const code = (err as { code?: string } | null)?.code;
-    if (code === 'MODEL_MISSING') {
-      logger.fatal(
-        { model: env.OLLAMA_MODEL },
-        `MODEL_MISSING: ${env.OLLAMA_MODEL} not found. Run 'npm run setup'.`,
-      );
-    } else if (code === 'OLLAMA_UNREACHABLE') {
-      logger.fatal(
-        { host: env.OLLAMA_HOST },
-        'OLLAMA_UNREACHABLE: cannot reach Ollama. Is the server running?',
-      );
-    } else {
-      logger.fatal({ err }, 'Ollama check failed at boot');
-    }
-    process.exit(1);
+  if (!env.SKIP_OLLAMA_CHECK) {
+      try {
+          console.log('[BOOT] 8 before checkModel');
+          await client.checkModel();
+          console.log('[BOOT] 9 checkModel ok');
+      } catch (error) {
+          console.error('[BOOT] checkModel failed', error);
+      }
   }
 
   const app = createApp(env, registry);
-  serve(
-    { fetch: app.fetch, port: env.PORT },
-    (info) => {
-      logger.info(
-        {
-          port: info.port,
-          ollamaHost: env.OLLAMA_HOST,
-          ollamaModel: env.OLLAMA_MODEL,
-          allowlist: env.CORS_ALLOWED_ORIGINS.split(','),
-        },
-        'chatbot-backend listening',
-      );
-    },
-  );
+  console.log('[BOOT] 10 app created');
+
+  serve({ fetch: app.fetch, port: Number(env.PORT) }, (info) => {
+      console.log('[BOOT] 11 listening', info.port);
+  });
 }
 
 /*const env = loadConfig();
@@ -310,6 +302,7 @@ const app = createApp(env, registry);
 
 export default handle(app);*/
 
-if (isMainEntry()) {
-  void main();
-}
+main().catch((err) => {
+  console.error('[BOOT] fatal', err);
+  process.exit(1);
+});
