@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
+import type { TocEntry } from './schema.js';
 
 /**
  * Renders post Markdown to sanitized HTML.
@@ -16,10 +17,45 @@ const IFRAME_HOSTS = [
   'player.vimeo.com',
 ];
 
-export function renderPostHtml(markdown: string): string {
-  const rawHtml = marked.parse(markdown, { async: false }) as string;
+function slugifyHeading(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'section'
+  );
+}
 
-  return sanitizeHtml(rawHtml, {
+function stripTags(html: string): string {
+  return sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} }).trim();
+}
+
+export function renderPostHtml(markdown: string): { html: string; toc: TocEntry[] } {
+  const rawHtml = marked.parse(markdown, { async: false }) as string;
+  const toc: TocEntry[] = [];
+  const seen = new Map<string, number>();
+
+  const withHeadingIds = rawHtml.replace(
+    /<h([1-6])>([\s\S]*?)<\/h\1>/g,
+    (_match, depth: string, innerHtml: string) => {
+      const text = stripTags(innerHtml);
+      const baseId = slugifyHeading(text);
+      const count = seen.get(baseId) ?? 0;
+      seen.set(baseId, count + 1);
+      const id = count === 0 ? baseId : `${baseId}-${count + 1}`;
+      const level = Number(depth);
+
+      if (level >= 2 && level <= 4) {
+        toc.push({ id, text, depth: level as 2 | 3 | 4 });
+      }
+
+      return `<h${level} id="${id}">${innerHtml}</h${level}>`;
+    },
+  );
+
+  const html = sanitizeHtml(withHeadingIds, {
     allowedTags: [
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'p', 'a', 'ul', 'ol', 'li', 'blockquote',
@@ -29,6 +65,12 @@ export function renderPostHtml(markdown: string): string {
     ],
     allowedAttributes: {
       '*': ['class'],
+      h1: ['id'],
+      h2: ['id'],
+      h3: ['id'],
+      h4: ['id'],
+      h5: ['id'],
+      h6: ['id'],
       a: ['href', 'name', 'target', 'rel'],
       img: ['src', 'alt', 'loading', 'width', 'height'],
       video: ['controls', 'preload', 'poster', 'width', 'height'],
@@ -41,4 +83,6 @@ export function renderPostHtml(markdown: string): string {
     // Keep relative URLs (e.g. /assets/blog/...) intact.
     allowProtocolRelative: false,
   });
+
+  return { html, toc };
 }

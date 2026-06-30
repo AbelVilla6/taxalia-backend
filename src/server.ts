@@ -1,11 +1,13 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
-import { handle } from '@hono/node-server/vercel';
+//import { handle } from '@hono/node-server/vercel';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
 import { loadConfig, type Env } from './config.js';
+import { buildContactRouter } from './contact/routes.js';
+import { createContactSender } from './contact/mail.js';
 import { buildChatRouter } from './chat/routes.js';
 import { createArtifactRegistry } from './loaders/registry.js';
 import { openBlogDb } from './content/db.js';
@@ -19,6 +21,8 @@ import { requestIdMiddleware } from './observability/requestId.js';
 import { createOllamaClient } from './ollama/client.js';
 import { Semaphore } from './dispatch/semaphore.js';
 import { ColdStartGate } from './chat/coldStart.js';
+
+//console.error('[BOOT] server.ts top-level');
 
 function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
@@ -106,6 +110,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
+  const sendContactSubmission = createContactSender(env);
   const semaphore = new Semaphore(env.DISPATCH_CONCURRENCY_CAP);
   const coldStart = new ColdStartGate(60_000);
 
@@ -151,6 +156,14 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
       semaphore,
       agentTimeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
       coldStart,
+      bookingUrl: env.CALCOM_URL,
+      logger,
+    }),
+  );
+  app.route(
+    '/',
+    buildContactRouter({
+      sendSubmission: sendContactSubmission,
       logger,
     }),
   );
@@ -160,7 +173,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
   // taking down the chat backend.
   try {
     const db = openBlogDb(env.BLOG_DB_PATH);
-    const repo = new PostRepository(db);
+    const repo = new PostRepository(db, env.FRONTEND_SITE_URL);
     const seeded = seedIfEmpty(repo);
     logger.info(
       { dbPath: env.BLOG_DB_PATH, seeded },
@@ -188,6 +201,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
         uploadDir: env.UPLOAD_DIR,
         sessionTtlMs: env.SESSION_TTL_HOURS * 3_600_000,
         cookieSecure: process.env.NODE_ENV === 'production',
+        ollama: client,
       }),
     );
 
@@ -228,76 +242,60 @@ function isMainEntry(): boolean {
   return entry.endsWith('server.ts') || entry.endsWith('server.js');
 }
 
-async function main(): Promise<void> {
+//console.error('[BOOT] module loaded');
+
+async function main() {
   const env = loadConfig();
+
   const logger = createLogger(env.LOG_LEVEL);
+  logger.info('boot 1: main entered');
+
   const registry = createArtifactRegistry();
+  logger.info('boot 2: registry created');
+
   const client = createOllamaClient({
     host: env.OLLAMA_HOST,
     model: env.OLLAMA_MODEL,
     apiKey: env.OLLAMA_API_KEY,
     timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
+  logger.info('boot 3: ollama client created');
 
   try {
+    logger.info('boot 4: before registry.reload');
     await registry.reload();
+    logger.info('boot 5: registry reloaded');
   } catch (error) {
-    logger.fatal({ err: error }, 'artifact load failed at boot');
-    process.exit(1);
+    logger.error('boot 6: registry.reload failed', { error });
   }
 
-  if (env.SKIP_OLLAMA_CHECK) {
-    logger.warn(
-      'SKIP_OLLAMA_CHECK is set: starting without Ollama. Chat will fail until Ollama is reachable; blog API is unaffected.',
-    );
-  }
-
-  try {
-    if (!env.SKIP_OLLAMA_CHECK) await client.checkModel();
-  } catch (err) {
-    const code = (err as { code?: string } | null)?.code;
-    if (code === 'MODEL_MISSING') {
-      logger.fatal(
-        { model: env.OLLAMA_MODEL },
-        `MODEL_MISSING: ${env.OLLAMA_MODEL} not found. Run 'npm run setup'.`,
-      );
-    } else if (code === 'OLLAMA_UNREACHABLE') {
-      logger.fatal(
-        { host: env.OLLAMA_HOST },
-        'OLLAMA_UNREACHABLE: cannot reach Ollama. Is the server running?',
-      );
-    } else {
-      logger.fatal({ err }, 'Ollama check failed at boot');
-    }
-    process.exit(1);
+  if (!env.SKIP_OLLAMA_CHECK) {
+      try {
+          logger.info('boot 7: before checkModel');
+          await client.checkModel();
+          logger.info('boot 8: checkModel ok');
+      } catch (error) {
+          logger.error('boot 9: checkModel failed', { error });
+      }
   }
 
   const app = createApp(env, registry);
-  serve(
-    { fetch: app.fetch, port: env.PORT },
-    (info) => {
-      logger.info(
-        {
-          port: info.port,
-          ollamaHost: env.OLLAMA_HOST,
-          ollamaModel: env.OLLAMA_MODEL,
-          allowlist: env.CORS_ALLOWED_ORIGINS.split(','),
-        },
-        'chatbot-backend listening',
-      );
-    },
-  );
+  logger.info('boot 10: app created');
+
+  serve({ fetch: app.fetch, port: Number(env.PORT) }, (info) => {
+      logger.info('boot 11: listening', { port: info.port });
+  });
 }
 
-const env = loadConfig();
+/*const env = loadConfig();
 const registry = createArtifactRegistry();
 
 await registry.reload();
 
 const app = createApp(env, registry);
 
-export default handle(app);
+export default handle(app);*/
 
-if (isMainEntry()) {
-  void main();
-}
+main().catch((err) => {
+  process.exit(1);
+});

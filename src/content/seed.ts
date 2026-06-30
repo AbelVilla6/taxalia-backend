@@ -91,7 +91,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'multimedia-post-example',
     lang: 'en',
-    translationKey: 'multimedia-post',
+    translationGroupId: 'multimedia-post',
     title: 'Multimedia post example',
     description:
       'Example article with images, videos, galleries and highlighted blocks in Markdown.',
@@ -107,7 +107,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'ejemplo-post-multimedia',
     lang: 'es',
-    translationKey: 'multimedia-post',
+    translationGroupId: 'multimedia-post',
     title: 'Ejemplo de post multimedia',
     description:
       'Artículo de ejemplo con imágenes, vídeos, galerías y bloques destacados en Markdown.',
@@ -123,7 +123,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'business-valuation-101',
     lang: 'en',
-    translationKey: 'valuation-101',
+    translationGroupId: 'valuation-101',
     title: 'Business Valuation 101',
     description:
       'A practical guide to understanding business valuation methods and how they support better decisions.',
@@ -139,7 +139,7 @@ const SEED_POSTS: Post[] = [
   {
     slug: 'valoracion-de-empresas-101',
     lang: 'es',
-    translationKey: 'valuation-101',
+    translationGroupId: 'valuation-101',
     title: 'Valoración de empresas 101',
     description:
       'Una guía práctica para entender los métodos de valoración de empresas y cómo ayudan a decidir mejor.',

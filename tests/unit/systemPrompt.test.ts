@@ -46,4 +46,39 @@ describe('assembleSystemPrompt', () => {
     expect(prompt.indexOf('Rule 2')).toBeLessThan(prompt.indexOf('Rule 3'));
     expect(prompt).toContain('- lookup-engagement-model: Find engagement model');
   });
+
+  it('includes the booking URL in an EN prompt when bookingUrl is provided', () => {
+    const prompt = assembleSystemPrompt({
+      lang: 'en',
+      conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
+      agent: { systemPrompt: 'Agent prompt' },
+      skills,
+      bookingUrl: 'https://cal.com/taxalia',
+    });
+    expect(prompt).toContain('## Booking');
+    expect(prompt).toContain('https://cal.com/taxalia');
+  });
+
+  it('includes the booking URL in an ES prompt when bookingUrl is provided', () => {
+    const prompt = assembleSystemPrompt({
+      lang: 'es',
+      conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
+      agent: { systemPrompt: 'Prompt del agente' },
+      skills,
+      bookingUrl: 'https://cal.com/taxalia',
+    });
+    expect(prompt).toContain('## Reserva');
+    expect(prompt).toContain('https://cal.com/taxalia');
+  });
+
+  it('omits the booking section when bookingUrl is not provided', () => {
+    const prompt = assembleSystemPrompt({
+      lang: 'en',
+      conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
+      agent: { systemPrompt: 'Agent prompt' },
+      skills,
+    });
+    expect(prompt).not.toContain('## Booking');
+    expect(prompt).not.toContain('## Reserva');
+  });
 });

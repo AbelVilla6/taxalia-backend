@@ -25,41 +25,61 @@ const ORCHESTRATOR_TIMEOUT_MS = 10_000;
  * agent ids in `backend/src/agents/*.md`.
  */
 export const KEYWORD_FALLBACK: Readonly<Record<string, readonly string[]>> = {
-  // Spanish
+  // Spanish \u2014 valuation
   'valoraci': ['valuation'],
   'valoraci\u00f3n': ['valuation'],
   'tasaci': ['valuation'],
   'tasar': ['valuation'],
+  // Spanish \u2014 financial
   'finanz': ['financial'],
   'financiero': ['financial'],
   'financiera': ['financial'],
   'contab': ['financial'],
   'contable': ['financial'],
+  'impuest': ['financial'],
+  'fiscal': ['financial'],
+  'tributari': ['financial'],
+  'declaraci\u00f3n': ['financial'],
+  'renta': ['financial'],
+  'n\u00f3mina': ['financial'],
+  'fbar': ['financial'],
+  'expat': ['financial'],
+  // Spanish \u2014 advisory / scheduling
   'asesor': ['advisory'],
   'asesor\u00eda': ['advisory'],
   'consultor': ['advisory'],
   'consultor\u00eda': ['advisory'],
   'empresa': ['advisory'],
   'negocio': ['valuation', 'advisory'],
-  'impuest': ['financial'],
-  'fiscal': ['financial'],
-  'tributari': ['financial'],
-  // English
+  'cita': ['advisory'],
+  'agendar': ['advisory'],
+  'reuni\u00f3n': ['advisory'],
+  // English \u2014 valuation
   'valuati': ['valuation'],
   'value my': ['valuation'],
   'company valuation': ['valuation'],
+  // English \u2014 financial
   'financ': ['financial'],
   'financial plan': ['financial'],
   'financial review': ['financial'],
   'tax': ['financial'],
   'taxes': ['financial'],
   'tax planning': ['financial'],
+  'income tax': ['financial'],
+  'irs': ['financial'],
+  'payroll': ['financial'],
+  'bookkeeping': ['financial'],
+  'accounting': ['financial'],
   'account': ['financial'],
+  // English \u2014 advisory / scheduling
   'advisor': ['advisory'],
   'advisory': ['advisory'],
   'consult': ['advisory'],
   'engagement': ['advisory'],
   'quote': ['advisory'],
+  'appointment': ['advisory'],
+  'booking': ['advisory'],
+  'schedule': ['advisory'],
   'business': ['advisory', 'financial'],
 };
 

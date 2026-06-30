@@ -268,6 +268,24 @@
       /* ── Uploader row ──────────────────────────────── */
       .uploader { display: flex; gap: 0.5rem; align-items: stretch; }
       .uploader input { flex: 1; }
+      /* ---- Content editor ---- */
+      .content-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 0.4rem; }
+      .content-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+      .lang-tabs { display: flex; align-items: center; gap: 0.4rem; margin: 0.6rem 0 1rem; }
+      .lang-tab {
+        background: transparent; color: var(--primary); border: 1px solid var(--border);
+        border-radius: 999px; padding: 0.4rem 1.1rem; font-weight: 700;
+      }
+      .lang-tab.is-active { background: var(--primary); color: #fff; }
+      #autosave-status { margin-left: auto; font-size: 0.78rem; color: var(--muted); }
+
+      #f-jsonld {
+        width: 100%; min-height: 140px; padding: 0.85rem 0.9rem; resize: vertical;
+        border: 1px solid var(--border); border-radius: 0.6rem; background: #fff;
+        color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.82rem; line-height: 1.5;
+      }
 
       /* ── Section divider ───────────────────────────── */
       .section-label {
@@ -485,7 +503,21 @@
         </div>
       </section>
 
-      <!-- ══════════ LIST ══════════ -->
+      <!-- FORCED PASSWORD CHANGE -->
+      <section id="view-password" class="card login" hidden>
+        <h2>Cambia tu contraseña</h2>
+        <p>Estás usando la contraseña inicial. Por seguridad, debes cambiarla antes de continuar.</p>
+        <div id="password-msg"></div>
+        <label>Contraseña actual</label>
+        <input id="pass-current" type="password" autocomplete="current-password" />
+        <label>Nueva contraseña (mínimo 8 caracteres)</label>
+        <input id="pass-new" type="password" autocomplete="new-password" />
+        <label>Repite la nueva contraseña</label>
+        <input id="pass-confirm" type="password" autocomplete="new-password" />
+        <div style="margin-top:1rem"><button id="password-btn">Guardar y continuar</button></div>
+      </section>
+
+      <!-- LIST -->
       <section id="view-list" hidden>
         <div class="toolbar">
           <h2>Artículos</h2>
@@ -519,6 +551,12 @@
 
         <!-- Meta fields -->
         <p class="section-label">Información del artículo</p>
+        <div class="lang-tabs">
+          <button type="button" class="lang-tab is-active" data-lang="es">Español</button>
+          <button type="button" class="lang-tab" data-lang="en">English</button>
+          <span id="autosave-status"></span>
+        </div>
+
         <div class="row">
           <div><label>Título</label><input id="f-title" placeholder="Título del artículo" /></div>
           <div><label>Slug <small>(URL)</small></label><input id="f-slug" placeholder="mi-articulo" /></div>
@@ -540,6 +578,10 @@
         <input id="f-description" placeholder="Breve descripción del artículo" />
 
         <p class="section-label">Autoría y etiquetas</p>
+        <label>ID del grupo de traducción <small>(enlaza es/en)</small></label>
+        <input id="f-tkey" placeholder="mi-articulo" />
+        <label>Descripción</label>
+        <input id="f-description" />
         <div class="row">
           <div><label>Autor</label><input id="f-author" value="Taxalia" /></div>
           <div>
@@ -565,6 +607,18 @@
           <input id="f-draft" type="checkbox" style="width:auto" />
           Borrador <small style="font-weight:400">(no se publica hasta que se desmarque)</small>
         </label>
+        <!-- Content: rich text editor (WYSIWYG + Markdown toggle) -->
+        <div class="content-head">
+          <label style="margin:0">Contenido</label>
+          <div class="content-actions">
+            <button class="ghost" type="button" id="process-btn" title="Extrae frontmatter, tags y JSON-LD de un texto pegado y rellena los campos">Procesar texto pegado</button>
+            <button class="ghost" type="button" id="translate-btn">Traducir con IA</button>
+          </div>
+        </div>
+        <textarea id="f-bodyMd" spellcheck="true" placeholder="Escribe aquí el contenido en Markdown, o pega un documento completo (con frontmatter y JSON-LD) y pulsa «Procesar texto pegado»."></textarea>
+
+        <label>JSON-LD personalizado <small>(opcional; p. ej. FAQPage. Se publica junto al Article generado)</small></label>
+        <textarea id="f-jsonld" spellcheck="false" placeholder='{"@context": "...", "@type": "FAQPage", "mainEntity": [...]}'></textarea>
 
         <!-- WYSIWYG content editor (Write/Preview tabs injected into its toolbar) -->
         <p class="section-label">Contenido del artículo</p>

@@ -95,6 +95,7 @@ function makeStubClient(opts: {
 function makeAppWithRealPipeline(
   client: OllamaClient,
   registry: ArtifactRegistry,
+  extraRouterOpts: { bookingUrl?: string } = {},
 ): Hono {
   const app = new Hono();
   app.use('*', requestIdMiddleware);
@@ -105,6 +106,7 @@ function makeAppWithRealPipeline(
       semaphore: new Semaphore(2),
       agentTimeoutMs: 30_000,
       coldStart: new ColdStartGate(0),
+      ...extraRouterOpts,
       pipelineOverride: (args: PipelineRunOptions) =>
         runChatPipeline({
           ...args,
@@ -231,6 +233,38 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.warning).toBeTruthy();
     expect(last.agentResponse).toBe(false);
+  });
+
+  it('includes a booking link in the noAgents delta and warning when bookingUrl is set', async () => {
+    const bookingUrl = 'https://cal.com/taxalia/consulta';
+    const client = makeStubClient({
+      orchestratorDecision: { agentsToRun: [], reasoning: '' },
+      agentText: 'unused',
+    });
+    const registry = makeRegistry(makeFullSnapshot(AGENTS));
+    const app = makeAppWithRealPipeline(client, registry, { bookingUrl });
+
+    const res = await app.request('http://test/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'mmm' }],
+        lang: 'en',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const frames = parseSse(await res.text());
+
+    const text = frames
+      .filter((e): e is DeltaEvent => 'delta' in e)
+      .map((e) => e.delta)
+      .join('');
+    expect(text).toContain(bookingUrl);
+
+    const last = frames[frames.length - 1] as DoneEnvelope;
+    expect(last.done).toBe(true);
+    expect(last.agentResponse).toBe(false);
+    expect(last.warning).toContain(bookingUrl);
   });
 
   it('keyword fallback routes a Spanish business prompt to an agent when the LLM returns []', async () => {

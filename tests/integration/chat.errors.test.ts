@@ -19,6 +19,13 @@ const ENV: Env = {
   ADMIN_PASSWORD: 'change-me-now',
   SESSION_TTL_HOURS: 12,
   UPLOAD_DIR: './data/uploads',
+  FRONTEND_SITE_URL: 'http://localhost:4321',
+  SMTP_PORT: 587,
+  SMTP_SECURE: false,
+  CONTACT_EMAIL_TO: 'info@hitaxalia.com',
+  CONTACT_EMAIL_FROM: 'LB&Co Global Advisors <info@hitaxalia.com>',
+  CONTACT_EMAIL_SUBJECT_PREFIX: '[LB&Co Contact]',
+  CALCOM_URL: 'https://cal.com/taxalia',
 };
 
 const ALLOWLIST = ENV.CORS_ALLOWED_ORIGINS.split(',');

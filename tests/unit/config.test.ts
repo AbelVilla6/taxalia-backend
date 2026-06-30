@@ -35,4 +35,22 @@ describe('loadConfig', () => {
       'custom-model',
     );
   });
+
+  it('defaults the contact recipient to info@hitaxalia.com', () => {
+    expect(loadConfig({}).CONTACT_EMAIL_TO).toBe('info@hitaxalia.com');
+  });
+
+  it('defaults CALCOM_URL to https://cal.com/taxalia', () => {
+    expect(loadConfig({}).CALCOM_URL).toBe('https://cal.com/taxalia');
+  });
+
+  it('accepts a custom CALCOM_URL override', () => {
+    expect(loadConfig({ CALCOM_URL: 'https://cal.com/my-firm' }).CALCOM_URL).toBe(
+      'https://cal.com/my-firm',
+    );
+  });
+
+  it('defaults the frontend site URL for canonical links', () => {
+    expect(loadConfig({}).FRONTEND_SITE_URL).toBe('http://localhost:4321');
+  });
 });

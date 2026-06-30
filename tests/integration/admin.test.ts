@@ -8,11 +8,16 @@ import { PostRepository } from '../../src/content/repository.js';
 import { AuthService } from '../../src/admin/auth.js';
 import { buildAdminRouter, SESSION_COOKIE } from '../../src/admin/routes.js';
 
-function setup() {
+function setup({ firstLoginDone = true } = {}) {
   const db = openBlogDb(':memory:');
   const repo = new PostRepository(db);
   const auth = new AuthService(db, 3_600_000);
   auth.ensureAdminUser('admin', 'secret123');
+  if (firstLoginDone) {
+    // Seeded admins must change their password; complete that step so the
+    // rest of the suite exercises a fully provisioned account.
+    auth.changePassword('admin', 'secret123', 'secret123');
+  }
   const uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
   const app = new Hono();
   app.route(
@@ -83,7 +88,7 @@ describe('admin API', () => {
   it('creates, lists, updates and deletes a post', async () => {
     const token = (await login(app))!;
     const body = JSON.stringify({
-      title: 'Nuevo', slug: 'nuevo', lang: 'es', translationKey: 'nuevo',
+      title: 'Nuevo', slug: 'nuevo', lang: 'es', translationGroupId: 'nuevo',
       description: 'd', bodyMd: '# Hola', pubDate: '2026-01-01', draft: false,
     });
 
@@ -98,7 +103,7 @@ describe('admin API', () => {
       authed(token, `/api/admin/posts/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          title: 'Editado', slug: 'nuevo', lang: 'es', translationKey: 'nuevo',
+          title: 'Editado', slug: 'nuevo', lang: 'es', translationGroupId: 'nuevo',
           description: 'd', bodyMd: '# Hola', pubDate: '2026-01-01', draft: false,
         }),
       }),
@@ -115,11 +120,30 @@ describe('admin API', () => {
   it('409s on duplicate slug+lang', async () => {
     const token = (await login(app))!;
     const body = JSON.stringify({
-      title: 'A', slug: 'dup', lang: 'es', translationKey: 'dup',
+      title: 'A', slug: 'dup', lang: 'es', translationGroupId: 'dup',
       description: '', bodyMd: '', pubDate: '2026-01-01', draft: false,
     });
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(201);
     expect((await app.fetch(authed(token, '/api/admin/posts', { method: 'POST', body }))).status).toBe(409);
+  });
+
+  it('rejects posts without a translation group id', async () => {
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Missing group',
+          slug: 'missing-group',
+          lang: 'es',
+          description: '',
+          bodyMd: '',
+          pubDate: '2026-01-01',
+          draft: false,
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
   });
 
   it('rejects svg uploads and accepts allowed media', async () => {
@@ -133,5 +157,237 @@ describe('admin API', () => {
 
     const { url } = (await png.json()) as { url: string };
     expect(url).toMatch(/^\/uploads\//);
+  });
+});
+
+describe('custom JSON-LD', () => {
+  let app: Hono;
+  let uploadDir: string;
+
+  beforeEach(() => {
+    ({ app, uploadDir } = setup());
+  });
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  const base = {
+    title: 'Con JSON-LD', slug: 'con-jsonld', lang: 'es', translationGroupId: 'con-jsonld',
+    description: 'd', bodyMd: '# Hola', pubDate: '2026-06-10', draft: true,
+  };
+
+  it('stores and returns a post custom JSON-LD', async () => {
+    const token = (await login(app))!;
+    const jsonLd = JSON.stringify({ '@context': 'https://schema.org', '@type': 'FAQPage' });
+
+    const created = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({ ...base, jsonLd }),
+      }),
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: number };
+
+    const fetched = await app.fetch(authed(token, '/api/admin/posts/' + id));
+    const { post } = (await fetched.json()) as { post: { jsonLd: string | null } };
+    expect(JSON.parse(post.jsonLd!)['@type']).toBe('FAQPage');
+  });
+
+  it('rejects JSON-LD that is not a JSON object', async () => {
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/posts', {
+        method: 'POST',
+        body: JSON.stringify({ ...base, jsonLd: 'not json at all' }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('editorial translation', () => {
+  let uploadDir: string;
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  function setupWithOllama(content: string | Error) {
+    const db = openBlogDb(':memory:');
+    const repo = new PostRepository(db);
+    const auth = new AuthService(db, 3_600_000);
+    auth.ensureAdminUser('admin', 'secret123');
+    auth.changePassword('admin', 'secret123', 'secret123');
+    uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
+    const calls: { system: string; user: string }[] = [];
+    const ollama = {
+      async chatOnce(args: { system: string; messages: { content: string }[] }) {
+        calls.push({ system: args.system, user: args.messages[0]?.content ?? '' });
+        if (content instanceof Error) throw content;
+        return { content };
+      },
+      chatStream: () => { throw new Error('not used'); },
+      checkModel: async () => {},
+    };
+    const app = new Hono();
+    app.route(
+      '/api/admin',
+      buildAdminRouter({
+        repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false,
+        ollama: ollama as never,
+      }),
+    );
+    return { app, calls };
+  }
+
+  const sourcePost = {
+    title: 'FBAR 2026: guía',
+    slug: 'fbar-2026-guia',
+    lang: 'es',
+    description: 'Guía sobre FBAR',
+    bodyMd: '## Qué es FBAR\n\nContenido.',
+    tags: ['FBAR', 'IRS'],
+    jsonLd: null,
+  };
+
+  it('translates a post via the Ollama skill and returns the proposed fields', async () => {
+    const translated = {
+      title: 'FBAR 2026: guide',
+      slug: 'fbar-2026-guide',
+      description: 'Guide about FBAR',
+      bodyMd: '## What is FBAR\n\nContent.',
+      tags: ['FBAR', 'IRS'],
+      jsonLd: '{"@context":"https://schema.org","@type":"FAQPage"}',
+    };
+    const { app, calls } = setupWithOllama(JSON.stringify(translated));
+    const token = (await login(app))!;
+
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { post: typeof translated & { lang: string } };
+    expect(body.post.lang).toBe('en');
+    expect(body.post.title).toBe('FBAR 2026: guide');
+    expect(JSON.parse(body.post.jsonLd!)['@type']).toBe('FAQPage');
+
+    // The skill prompt and the source content both reach the model.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].system.length).toBeGreaterThan(100);
+    expect(calls[0].user).toContain('FBAR 2026: guía');
+    expect(calls[0].user).toContain('targetLang');
+  });
+
+  it('502s when the model returns unparseable output', async () => {
+    const { app } = setupWithOllama('this is not json');
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(502);
+  });
+
+  it('503s when no Ollama client is configured', async () => {
+    let app: Hono;
+    ({ app, uploadDir } = setup());
+    const token = (await login(app))!;
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('first-login password change', () => {
+  let app: Hono;
+  let uploadDir: string;
+
+  beforeEach(() => {
+    ({ app, uploadDir } = setup({ firstLoginDone: false }));
+  });
+
+  afterEach(() => {
+    rmSync(uploadDir, { recursive: true, force: true });
+  });
+
+  async function loginRaw(password: string): Promise<Response> {
+    return app.fetch(
+      new Request('http://x/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'admin', password }),
+      }),
+    );
+  }
+
+  it('reports mustChangePassword on first login', async () => {
+    const res = await loginRaw('secret123');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { mustChangePassword: boolean };
+    expect(body.mustChangePassword).toBe(true);
+  });
+
+  it('blocks content endpoints until the password is changed', async () => {
+    const token = (await login(app))!;
+
+    const posts = await app.fetch(authed(token, '/api/admin/posts'));
+    expect(posts.status).toBe(403);
+    const body = (await posts.json()) as { error: string };
+    expect(body.error).toBe('PASSWORD_CHANGE_REQUIRED');
+
+    const me = await app.fetch(authed(token, '/api/admin/me'));
+    expect(me.status).toBe(200);
+  });
+
+  it('changes the password, unblocks the panel, and invalidates the old one', async () => {
+    const token = (await login(app))!;
+
+    const change = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'secret123', newPassword: 'brand-new-pass-1' }),
+      }),
+    );
+    expect(change.status).toBe(200);
+
+    const posts = await app.fetch(authed(token, '/api/admin/posts'));
+    expect(posts.status).toBe(200);
+
+    expect((await loginRaw('secret123')).status).toBe(401);
+    const fresh = await loginRaw('brand-new-pass-1');
+    expect(fresh.status).toBe(200);
+    const body = (await fresh.json()) as { mustChangePassword: boolean };
+    expect(body.mustChangePassword).toBe(false);
+  });
+
+  it('rejects a wrong current password and a short new password', async () => {
+    const token = (await login(app))!;
+
+    const wrongCurrent = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'nope', newPassword: 'brand-new-pass-1' }),
+      }),
+    );
+    expect(wrongCurrent.status).toBe(401);
+
+    const weak = await app.fetch(
+      authed(token, '/api/admin/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'secret123', newPassword: 'short' }),
+      }),
+    );
+    expect(weak.status).toBe(400);
   });
 });
