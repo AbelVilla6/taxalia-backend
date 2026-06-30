@@ -2,6 +2,14 @@ import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import { DEFAULT_LOCAL_MODEL, DEFAULT_PRODUCTION_MODEL } from './ollama/models.js';
 
+const BooleanFromEnvSchema = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+  }
+
+  return value;
+}, z.boolean());
+
 const EnvSchema = z.object({
   OLLAMA_HOST: z.string().url().optional(),
   OLLAMA_API_KEY: z.string().optional(),
@@ -10,7 +18,7 @@ const EnvSchema = z.object({
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   SMTP_HOST: z.string().trim().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: BooleanFromEnvSchema.default(false),
   SMTP_USER: z.string().trim().min(1).optional(),
   SMTP_PASS: z.string().trim().min(1).optional(),
   CONTACT_EMAIL_TO: z.string().email().default('info@hitaxalia.com'),
