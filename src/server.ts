@@ -22,7 +22,7 @@ import { createOllamaClient } from './ollama/client.js';
 import { Semaphore } from './dispatch/semaphore.js';
 import { ColdStartGate } from './chat/coldStart.js';
 
-console.error('[BOOT] server.ts top-level');
+//console.error('[BOOT] server.ts top-level');
 
 function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
@@ -242,54 +242,48 @@ function isMainEntry(): boolean {
   return entry.endsWith('server.ts') || entry.endsWith('server.js');
 }
 
-console.error('[BOOT] module loaded');
+//console.error('[BOOT] module loaded');
 
 async function main() {
-  console.error('[BOOT] main entered');
-
   const env = loadConfig();
-  console.error('[BOOT] config loaded', {
-    port: env.PORT,
-    skipOllama: env.SKIP_OLLAMA_CHECK,
-  });
 
   const logger = createLogger(env.LOG_LEVEL);
-  logger.info('[BOOT] 3 logger ready');
+  logger.info('boot 1: main entered');
 
   const registry = createArtifactRegistry();
-  console.log('[BOOT] 4 registry created');
+  logger.info('boot 2: registry created');
 
   const client = createOllamaClient({
-      host: env.OLLAMA_HOST,
-      model: env.OLLAMA_MODEL,
-      apiKey: env.OLLAMA_API_KEY,
-      timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
+    host: env.OLLAMA_HOST,
+    model: env.OLLAMA_MODEL,
+    apiKey: env.OLLAMA_API_KEY,
+    timeoutMs: env.OLLAMA_AGENT_TIMEOUT_MS,
   });
-  console.log('[BOOT] 5 client created');
+  logger.info('boot 3: ollama client created');
 
   try {
-      console.log('[BOOT] 6 before registry.reload');
-      await registry.reload();
-      console.log('[BOOT] 7 registry reloaded');
+    logger.info('boot 4: before registry.reload');
+    await registry.reload();
+    logger.info('boot 5: registry reloaded');
   } catch (error) {
-      console.error('[BOOT] registry.reload failed', error);
+    logger.error('boot 6: registry.reload failed', { error });
   }
 
   if (!env.SKIP_OLLAMA_CHECK) {
       try {
-          console.log('[BOOT] 8 before checkModel');
+          logger.info('boot 7: before checkModel');
           await client.checkModel();
-          console.log('[BOOT] 9 checkModel ok');
+          logger.info('boot 8: checkModel ok');
       } catch (error) {
-          console.error('[BOOT] checkModel failed', error);
+          logger.error('boot 9: checkModel failed', { error });
       }
   }
 
   const app = createApp(env, registry);
-  console.log('[BOOT] 10 app created');
+  logger.info('boot 10: app created');
 
   serve({ fetch: app.fetch, port: Number(env.PORT) }, (info) => {
-      console.log('[BOOT] 11 listening', info.port);
+      logger.info('boot 11: listening', { port: info.port });
   });
 }
 
@@ -303,6 +297,5 @@ const app = createApp(env, registry);
 export default handle(app);*/
 
 main().catch((err) => {
-  console.error('[BOOT] fatal', err);
   process.exit(1);
 });
