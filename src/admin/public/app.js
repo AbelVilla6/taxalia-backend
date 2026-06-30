@@ -9,10 +9,12 @@ const views = {
   list: $('view-list'),
   editor: $('view-editor'),
 };
+
 function show(name) {
   for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
   $('logout').hidden = name === 'login';
 }
+
 function msg(el, text, kind) {
   el.innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : '';
 }
@@ -35,11 +37,13 @@ async function uploadFile(file) {
   if (!res.ok) throw new Error(data?.error ?? String(res.status));
   return data.url;
 }
+
 // ---- Auth ----
 async function enterPanel() {
   await loadList();
   show('list');
 }
+
 async function checkSession() {
   const { ok, data } = await api('/me');
   if (!ok) { show('login'); return; }
@@ -58,8 +62,15 @@ $('login-btn').addEventListener('click', async () => {
     $('login-pass').value = '';
     if (data?.mustChangePassword) { show('password'); return; }
     await enterPanel();
+  } else {
+    msg(
+      $('login-msg'),
+      data?.error === 'INVALID_CREDENTIALS' ? 'Usuario o contraseña incorrectos.' : 'No se pudo iniciar sesión.',
+      'err',
+    );
   }
-  else msg($('login-msg'), data?.error === 'INVALID_CREDENTIALS' ? 'Usuario o contraseña incorrectos.' : 'No se pudo iniciar sesión.', 'err');
+  $('login-btn').disabled = false;
+  $('login-btn').textContent = 'Entrar';
 });
 
 $('password-btn').addEventListener('click', async () => {
@@ -166,9 +177,6 @@ $('back-btn').addEventListener('click', async () => {
 });
 
 // ---- Bilingual editor state ----
-// Both language versions of a translation group are edited together. The DOM
-// form always shows `ed.activeLang`; the other language lives as a snapshot
-// in `ed.forms` and is autosaved when tabs switch.
 const ed = {
   activeLang: 'es',
   ids: { es: null, en: null },
@@ -177,6 +185,9 @@ const ed = {
 
 // ── WYSIWYG Editor (Toast UI) ─────────────────────────────────────────────────
 let editor = null;
+let previewFrame = null;
+let previewTimer = null;
+let uploadTarget = null; // 'hero' | 'figure' | 'video'
 
 function makeSvgBtn(title, svgPath, clickHandler) {
   const btn = document.createElement('button');
@@ -197,23 +208,22 @@ function initEditor() {
   const mount = $('editor-mount');
   mount.innerHTML = '';
 
-  // Custom toolbar elements
   const btnFigure = makeSvgBtn(
     'Insertar figura (imagen + pie de foto)',
     '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
-    () => { uploadTarget = 'figure'; $('file-picker').accept = 'image/jpeg,image/png,image/webp,image/gif'; $('file-picker').click(); }
+    () => { uploadTarget = 'figure'; $('file-picker').accept = 'image/jpeg,image/png,image/webp,image/gif'; $('file-picker').click(); },
   );
 
   const btnVideo = makeSvgBtn(
     'Subir vídeo (MP4/WebM)',
     '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
-    () => { uploadTarget = 'video'; $('file-picker').accept = 'video/mp4,video/webm'; $('file-picker').click(); }
+    () => { uploadTarget = 'video'; $('file-picker').accept = 'video/mp4,video/webm'; $('file-picker').click(); },
   );
 
   const btnYoutube = makeSvgBtn(
     'Insertar vídeo de YouTube',
     '<path d="M22.54 6.42A2.78 2.78 0 0 0 20.6 4.47C18.88 4 12 4 12 4s-6.88 0-8.6.47A2.78 2.78 0 0 0 1.46 6.42 29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.4 19.53C5.12 20 12 20 12 20s6.88 0 8.6-.47a2.78 2.78 0 0 0 1.94-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>',
-    insertYouTube
+    insertYouTube,
   );
 
   editor = new toastui.Editor({
@@ -244,13 +254,10 @@ function initEditor() {
   });
 
   setupEditorTabs(mount);
+  editor.on('change', schedulePreview);
 }
 
 // ── Write / Preview tabs (injected into the Toast UI toolbar) ────────────────
-// Toast UI only renders its native Write/Preview tabs in Markdown mode, so we
-// inject an identical tab bar into the toolbar for WYSIWYG mode. The preview
-// renders in an iframe to keep the published-article CSS (preview.css)
-// isolated from the admin page styles.
 function setupEditorTabs(root) {
   const toolbar = root.querySelector('.toastui-editor-toolbar');
   const buttonsRow = root.querySelector('.toastui-editor-defaultUI-toolbar');
@@ -280,6 +287,7 @@ function setupEditorTabs(root) {
   frame.title = 'Vista previa del artículo';
   frame.hidden = true;
   mainArea.insertAdjacentElement('afterend', frame);
+  previewFrame = frame;
 
   const showWrite = () => {
     tabWrite.classList.add('active');
@@ -309,16 +317,43 @@ function setupEditorTabs(root) {
   tabWrite.addEventListener('click', showWrite);
   tabPreview.addEventListener('click', showPreview);
 
-  // In Markdown mode Toast UI shows its own native tabs — hide ours.
   editor.on('changeMode', (mode) => {
     container.style.display = mode === 'markdown' ? 'none' : '';
     showWrite();
   });
 }
 
-// ── File picker & upload targets ─────────────────────────────────────────────
-let uploadTarget = null; // 'hero' | 'figure' | 'video'
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(renderPreview, 400);
+}
 
+function insertHtmlBlock(snippet) {
+  if (!editor) return;
+  editor.insertText('\n' + snippet + '\n');
+  schedulePreview();
+}
+
+function insertYouTube() {
+  const input = window.prompt('URL de YouTube (ej: https://youtu.be/xxxxx o https://www.youtube.com/watch?v=xxxxx):');
+  if (!input) return;
+  const id = ytId(input);
+  if (!id) {
+    msg($('editor-msg'), 'No se pudo identificar el ID del vídeo de YouTube.', 'err');
+    return;
+  }
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${id}`;
+  insertHtmlBlock(
+    `<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="${embedUrl}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption>Vídeo de YouTube</figcaption>\n</figure>`,
+  );
+}
+
+function ytId(input) {
+  const m = String(input).match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
+  return m ? m[1] : null;
+}
+
+// ── File picker & upload targets ─────────────────────────────────────────────
 $('hero-upload').addEventListener('click', () => {
   uploadTarget = 'hero';
   $('file-picker').accept = 'image/jpeg,image/png,image/webp,image/gif';
@@ -340,65 +375,83 @@ $('file-picker').addEventListener('change', async (e) => {
   if (uploadTarget === 'hero') {
     $('f-heroImage').value = url;
     msg($('editor-msg'), 'Imagen de portada subida: ' + url, 'ok');
+    uploadTarget = null;
     return;
   }
 
   if (!editor) return;
-
   if (uploadTarget === 'figure') {
-    editor.insertText(
-      `\n<figure class="blog-media blog-media--wide">\n  <img src="${url}" alt="" loading="lazy">\n  <figcaption>Escribe aquí el pie de foto</figcaption>\n</figure>\n`
+    insertHtmlBlock(
+      `<figure class="blog-media blog-media--wide">\n  <img src="${url}" alt="" loading="lazy">\n  <figcaption>Escribe aquí el pie de foto</figcaption>\n</figure>`,
     );
   } else if (uploadTarget === 'video') {
-    editor.insertText(
-      `\n<figure class="blog-media blog-media--wide">\n  <video controls preload="metadata" class="blog-media-video">\n    <source src="${url}" type="${file.type}">\n  </video>\n  <figcaption>Escribe aquí el pie del vídeo</figcaption>\n</figure>\n`
+    insertHtmlBlock(
+      `<figure class="blog-media blog-media--wide">\n  <video controls preload="metadata" class="blog-media-video">\n    <source src="${url}" type="${file.type}">\n  </video>\n  <figcaption>Escribe aquí el pie del vídeo</figcaption>\n</figure>`,
     );
   }
 
+  uploadTarget = null;
   msg($('editor-msg'), 'Archivo subido: ' + url, 'ok');
 });
 
-function insertYouTube() {
-  const input = window.prompt('URL de YouTube (ej: https://youtu.be/xxxxx o https://www.youtube.com/watch?v=xxxxx):');
-  if (!input) return;
-  const id = ytId(input);
-  if (!id) {
-    msg($('editor-msg'), 'No se pudo identificar el ID del vídeo de YouTube.', 'err');
-    return;
-  }
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${id}`;
-  editor.insertText(
-    `\n<figure class="blog-media blog-media--wide">\n  <div class="blog-media-embed">\n    <iframe src="${embedUrl}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n  </div>\n  <figcaption>Vídeo de YouTube</figcaption>\n</figure>\n`
-  );
-}
-
-function ytId(input) {
-  const m = String(input).match(/(?:v=|youtu\.be\/|embed\/)([\w-]{6,})/);
-  return m ? m[1] : null;
-}
-
 // ── Form helpers ──────────────────────────────────────────────────────────────
-function fillForm(p) {
-  $('f-id').value       = p?.id ?? '';
-  $('f-title').value    = p?.title ?? '';
-  $('f-slug').value     = p?.slug ?? '';
-  $('f-lang').value     = p?.lang ?? 'es';
-  $('f-tkey').value     = p?.translationKey ?? '';
-  $('f-description').value = p?.description ?? '';
-  $('f-author').value   = p?.author ?? 'Taxalia';
-  $('f-tags').value     = (p?.tags ?? []).join(', ');
-  $('f-pubDate').value  = (p?.pubDate ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
-  $('f-updatedDate').value = p?.updatedDate ? p.updatedDate.slice(0, 10) : '';
-  $('f-heroImage').value = p?.heroImage ?? '';
-  $('f-heroAlt').value  = p?.heroAlt ?? '';
-  $('f-draft').checked  = !!p?.draft;
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-  if (editor) {
-    editor.setMarkdown(p?.bodyMd ?? '');
-  }
+function emptyForm(lang, base) {
+  return {
+    title: '',
+    slug: '',
+    lang,
+    translationGroupId: base?.translationGroupId ?? '',
+    description: '',
+    author: base?.author ?? 'Taxalia',
+    tags: [],
+    pubDate: base?.pubDate ?? today(),
+    updatedDate: base?.updatedDate ?? null,
+    heroImage: base?.heroImage ?? null,
+    heroAlt: null,
+    draft: base?.draft ?? false,
+    bodyMd: '',
+    jsonLd: '',
+  };
+}
+
+function formFromApi(p) {
+  return {
+    title: p.title,
+    slug: p.slug,
+    lang: p.lang,
+    translationGroupId: p.translationGroupId ?? p.translationKey ?? '',
+    description: p.description ?? '',
+    author: p.author ?? 'Taxalia',
+    tags: p.tags ?? [],
+    pubDate: (p.pubDate ?? today()).slice(0, 10),
+    updatedDate: p.updatedDate ? p.updatedDate.slice(0, 10) : null,
+    heroImage: p.heroImage ?? null,
+    heroAlt: p.heroAlt ?? null,
+    draft: !!p.draft,
+    bodyMd: p.bodyMd ?? '',
+    jsonLd: p.jsonLd ?? '',
+  };
+}
+
+function setAutosaveStatus(text) {
+  $('autosave-status').textContent = text;
+}
+
+function renderTabs() {
+  document.querySelectorAll('.lang-tab').forEach((tab) => {
+    tab.classList.toggle('is-active', tab.dataset.lang === ed.activeLang);
+  });
+  $('delete-btn').hidden = ed.ids[ed.activeLang] == null;
+  $('translate-btn').textContent =
+    ed.activeLang === 'es' ? 'Traducir con IA → English' : 'Traducir con IA → Español';
 }
 
 function writeForm(f) {
+  $('f-id').value = ed.ids[f.lang] ?? '';
   $('f-title').value = f.title;
   $('f-slug').value = f.slug;
   $('f-tkey').value = f.translationGroupId;
@@ -410,8 +463,8 @@ function writeForm(f) {
   $('f-heroImage').value = f.heroImage ?? '';
   $('f-heroAlt').value = f.heroAlt ?? '';
   $('f-draft').checked = !!f.draft;
-  bodyEditor.value = f.bodyMd;
   $('f-jsonld').value = f.jsonLd ?? '';
+  if (editor) editor.setMarkdown(f.bodyMd ?? '');
 }
 
 function readForm() {
@@ -430,34 +483,17 @@ function readForm() {
     heroAlt: $('f-heroAlt').value.trim() || null,
     draft: $('f-draft').checked,
     bodyMd: editor ? editor.getMarkdown() : '',
+    jsonLd: $('f-jsonld').value.trim(),
   };
 }
 
 // ── Editor open / save / delete ───────────────────────────────────────────────
 async function openEditor(id) {
   msg($('editor-msg'), '', '');
-  initEditor();
-
-  if (id == null) {
-    $('editor-title').textContent = 'Nuevo artículo';
-    $('delete-btn').hidden = true;
-    fillForm(null);
-  } else {
-    const { ok, data } = await api('/posts/' + id);
-    if (!ok) return;
-    $('editor-title').textContent = 'Editar artículo';
-    $('delete-btn').hidden = false;
-    fillForm(data.post);
-  }
-
-  show('editor');
-}
-
-$('save-btn').addEventListener('click', async () => {
-  msg($('editor-msg'), '', '');
   setAutosaveStatus('');
   ed.ids = { es: null, en: null };
   ed.forms = { es: null, en: null };
+  initEditor();
 
   if (id == null) {
     $('editor-title').textContent = 'Nuevo artículo';
@@ -469,16 +505,16 @@ $('save-btn').addEventListener('click', async () => {
     const { ok, data } = await api('/posts/' + id);
     if (!ok) return;
     const post = data.post;
+    const groupId = post.translationGroupId ?? post.translationKey ?? '';
     $('editor-title').textContent = 'Editar artículo';
     ed.activeLang = post.lang;
     ed.ids[post.lang] = post.id;
     ed.forms[post.lang] = formFromApi(post);
 
-    // Load the sibling translation of the same group, if it exists.
     const other = post.lang === 'es' ? 'en' : 'es';
     const list = await api('/posts');
     const sibling = (list.data?.posts ?? []).find(
-      (p) => p.translationGroupId === post.translationGroupId && p.lang === other,
+      (p) => (p.translationGroupId ?? p.translationKey ?? '') === groupId && p.lang === other,
     );
     if (sibling) {
       const full = await api('/posts/' + sibling.id);
@@ -487,25 +523,15 @@ $('save-btn').addEventListener('click', async () => {
         ed.forms[other] = formFromApi(full.data.post);
       }
     }
-    if (!ed.forms[other]) {
-      ed.forms[other] = emptyForm(other, ed.forms[post.lang]);
-    }
+    if (!ed.forms[other]) ed.forms[other] = emptyForm(other, ed.forms[post.lang]);
     writeForm(ed.forms[post.lang]);
   }
-  $('save-btn').disabled = true;
-  $('save-btn').textContent = 'Guardando…';
 
-  const id = $('f-id').value;
   renderTabs();
   show('editor');
   renderPreview();
 }
 
-/**
- * Saves the language currently shown in the form. With `silent` the save is
- * skipped (snapshot only) when required fields are missing, instead of
- * showing an error — used for autosave on tab switches.
- */
 async function saveActive({ silent } = {}) {
   const f = readForm();
   ed.forms[ed.activeLang] = f;
@@ -532,25 +558,15 @@ async function saveActive({ silent } = {}) {
     ? await api('/posts/' + id, { method: 'PUT', body: JSON.stringify(payload) })
     : await api('/posts', { method: 'POST', body: JSON.stringify(payload) });
 
-  $('save-btn').disabled = false;
-  $('save-btn').textContent = 'Guardar artículo';
-
-  if (ok) {
-    await loadList();
-    show('list');
-  } else if (status === 409) {
-    msg($('editor-msg'), 'Ya existe un artículo con ese slug en ese idioma.', 'err');
-  } else {
-    msg($('editor-msg'), 'No se pudo guardar (' + (data?.error ?? status) + ').', 'err');
-  }
-  
   if (ok) {
     if (!id && data?.id) ed.ids[ed.activeLang] = data.id;
     const time = new Date().toLocaleTimeString().slice(0, 5);
     setAutosaveStatus(`${ed.activeLang}: guardado ${time}`);
+    await loadList();
     renderTabs();
     return true;
   }
+
   const text = status === 409
     ? 'Ya existe un artículo con ese slug en ese idioma.'
     : 'No se pudo guardar (' + (data?.error ?? status) + ').';
@@ -559,7 +575,6 @@ async function saveActive({ silent } = {}) {
   return false;
 }
 
-// Switching language autosaves the visible form, then shows the other one.
 async function switchLang(target) {
   if (target === ed.activeLang) return;
   await saveActive({ silent: true });
@@ -567,7 +582,6 @@ async function switchLang(target) {
   const current = ed.forms[ed.activeLang];
   ed.activeLang = target;
   if (!ed.forms[target]) ed.forms[target] = emptyForm(target, current);
-  // Keep the shared group id in sync so both languages stay linked.
   if (!ed.forms[target].translationGroupId && current?.translationGroupId) {
     ed.forms[target].translationGroupId = current.translationGroupId;
   }
@@ -594,30 +608,15 @@ async function deletePost(id) {
   if (ok) { await loadList(); show('list'); }
 }
 
-
-$('f-title').addEventListener('input', () => {
-  if ($('f-id').value) return; // don't overwrite on edit
-  const slug = $('f-title').value
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  $('f-slug').value = slug;
-  if (!$('f-tkey').value) $('f-tkey').value = slug;
 // ---- Auto-match: parse a pasted document into form fields ----
-// Accepts a blob with a frontmatter-like header (title, slug, tags as * / -
-// bullets, etc.), free content, and an optional "## JSON-LD" section with a
-// ```json fence. Only the real article content stays in the body.
 function unquote(value) {
   const v = value.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    return v.slice(1, -1);
-  }
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) return v.slice(1, -1);
   return v;
 }
 
 function parseAutoMatch(raw) {
-  let text = raw.replace(/\r\n/g, '\n').trim();
+  let text = String(raw ?? '').replace(/\r\n/g, '\n').trim();
   const fields = {};
   let tags = null;
   let jsonLd = null;
@@ -645,7 +644,6 @@ function parseAutoMatch(raw) {
         if (key === 'tags') {
           tags = [];
           inTags = true;
-          // Inline form: tags: [a, b] / tags: a, b
           const inline = value.replace(/^\[|\]$/g, '').trim();
           if (inline) tags.push(...inline.split(',').map((x) => unquote(x)).filter(Boolean));
         } else {
@@ -655,7 +653,6 @@ function parseAutoMatch(raw) {
     }
   }
 
-  // "## JSON-LD ..." heading followed by a ```json fence → extracted field.
   const jsonLdSection = /(?:^|\n)(?:-{3,}\s*\n+)?#{1,6}[^\n]*json[\s-]?ld[^\n]*\n+```(?:json)?\s*\n([\s\S]*?)\n```\s*/i;
   const match = text.match(jsonLdSection);
   if (match) {
@@ -663,19 +660,18 @@ function parseAutoMatch(raw) {
       jsonLd = JSON.stringify(JSON.parse(match[1]), null, 2);
       text = text.replace(match[0], '\n');
     } catch {
-      // Leave the section in the body if its JSON does not parse.
+      // Keep invalid JSON-LD in the body.
     }
   }
 
-  // Drop stray separator lines left at the edges.
   text = text.replace(/^\s*-{3,}\s*\n/, '').replace(/\n-{3,}\s*$/, '').trim();
-
   return { fields, tags, jsonLd, body: text };
 }
 
 $('process-btn').addEventListener('click', () => {
   msg($('editor-msg'), '', '');
-  const { fields, tags, jsonLd, body } = parseAutoMatch(bodyEditor.value);
+  const raw = editor ? editor.getMarkdown() : '';
+  const { fields, tags, jsonLd, body } = parseAutoMatch(raw);
 
   if (!body && !Object.keys(fields).length && !jsonLd) {
     return msg($('editor-msg'), 'No hay nada que procesar: pega el documento en el campo de contenido.', 'err');
@@ -693,7 +689,7 @@ $('process-btn').addEventListener('click', () => {
   if (fields.draft) $('f-draft').checked = fields.draft === 'true';
   if (tags && tags.length) $('f-tags').value = tags.join(', ');
   if (jsonLd) $('f-jsonld').value = jsonLd;
-  bodyEditor.value = body;
+  if (editor) editor.setMarkdown(body);
 
   const declaredLang = (fields.language || fields.lang || '').toLowerCase();
   if (declaredLang && declaredLang !== ed.activeLang) {
@@ -701,6 +697,8 @@ $('process-btn').addEventListener('click', () => {
   } else {
     msg($('editor-msg'), 'Texto procesado: campos rellenados' + (jsonLd ? ' y JSON-LD extraído.' : '.'), 'ok');
   }
+
+  ed.forms[ed.activeLang] = { ...(ed.forms[ed.activeLang] ?? emptyForm(ed.activeLang)), ...readForm() };
   renderPreview();
 });
 
@@ -769,51 +767,26 @@ $('translate-btn').addEventListener('click', async () => {
 });
 
 // ---- Live site-accurate preview (rendered by the backend = published 1:1) ----
-let previewTimer = null;
-function schedulePreview() {
-  clearTimeout(previewTimer);
-  previewTimer = setTimeout(renderPreview, 400);
-}
 async function renderPreview() {
-  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown: bodyEditor.value }) });
+  if (!previewFrame) return;
+  const markdown = editor ? editor.getMarkdown() : '';
+  const { data } = await api('/preview', { method: 'POST', body: JSON.stringify({ markdown }) });
   const html = data?.html || '<p class="preview-empty">Sin contenido todavía…</p>';
-  frame.srcdoc =
+  previewFrame.srcdoc =
     '<!doctype html><html lang="es"><head><meta charset="utf-8">' +
     '<link rel="stylesheet" href="/admin/preview.css"></head>' +
     '<body><div class="blog-post-detail__body">' + html + '</div></body></html>';
 }
 
-bodyEditor.addEventListener('input', schedulePreview);
-
-// ---- Multimedia blocks (inserted as HTML; shown in Markdown mode) ----
-function insertHtmlBlock(snippet) {
-  const start = bodyEditor.selectionStart ?? bodyEditor.value.length;
-  const end = bodyEditor.selectionEnd ?? bodyEditor.value.length;
-  bodyEditor.setRangeText('\n' + snippet + '\n', start, end, 'end');
-  bodyEditor.focus();
-  schedulePreview();
-}
-
-let uploadTarget = null; // 'hero' | 'wide' | 'right'
-
-$('hero-upload').addEventListener('click', () => { uploadTarget = 'hero'; $('file-picker').click(); });
-
-
-$('file-picker').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  let url;
-  try { url = await uploadFile(file); }
-  catch (err) { return msg($('editor-msg'), 'No se pudo subir (' + err.message + ').', 'err'); }
-
-  if (uploadTarget === 'hero') {
-    $('f-heroImage').value = url;
-  } else {
-    const cls = uploadTarget === 'right' ? 'blog-media blog-media--right' : 'blog-media blog-media--wide';
-    insertHtmlBlock(`<figure class="${cls}">\n  <img src="${url}" alt="" loading="lazy">\n  <figcaption></figcaption>\n</figure>`);
-  }
-  msg($('editor-msg'), 'Archivo subido: ' + url, 'ok');
+$('f-title').addEventListener('input', () => {
+  if ($('f-id').value) return;
+  const slug = $('f-title').value
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  $('f-slug').value = slug;
+  if (!$('f-tkey').value) $('f-tkey').value = slug;
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
