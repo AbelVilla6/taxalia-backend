@@ -91,14 +91,10 @@ const NO_AGENTS_OPTIONS: Record<
 function buildNoAgentsDelta(lang: 'en' | 'es'): string {
   const contact = NO_AGENTS_CONTACT[lang];
   const options = JSON.stringify({ options: NO_AGENTS_OPTIONS[lang] }, null, 2);
-  const booking = JSON.stringify({ url: contact.url, label: contact.label }, null, 2);
 
   return [
     WARNINGS[lang].noAgents,
-    NO_AGENTS_FOLLOWUP[lang],
-    '```taxalia-booking-json',
-    booking,
-    '```',
+    `${NO_AGENTS_FOLLOWUP[lang]} [${contact.label}](${contact.url}).`,
     '```taxalia-options-json',
     options,
     '```',
