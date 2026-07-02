@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { runSqliteBlogMigration } from '../../scripts/migrate-sqlite-blog.js';
 import { mapSqlitePostRow } from '../../src/content/sqliteMigration.js';
@@ -93,6 +96,9 @@ describe('mapSqlitePostRow', () => {
 
 describe('runSqliteBlogMigration', () => {
   it('does not touch MySQL in dry-run mode', async () => {
+    const sqlitePath = join(mkdtempSync(join(tmpdir(), 'taxalia-sqlite-migration-')), 'blog.sqlite');
+    writeFileSync(sqlitePath, '');
+
     const sqliteDb = {
       prepare: vi.fn(() => ({
         iterate: function* () {
@@ -100,7 +106,8 @@ describe('runSqliteBlogMigration', () => {
             slug: 'dry-run-post',
             lang: 'en',
             title: 'Dry run post',
-            content_md: 'Dry run body',
+            pub_date: '2024-01-01',
+            body_md: 'Dry run body',
             published: 1,
           };
         },
@@ -119,7 +126,7 @@ describe('runSqliteBlogMigration', () => {
 
     await expect(
       runSqliteBlogMigration(
-        { sqlitePath: './fixtures/blog.sqlite', dryRun: true },
+        { sqlitePath, dryRun: true },
         { openSqliteDb, loadConfig, openBlogDb, closeBlogDb },
       ),
     ).resolves.toEqual({ read: 1, migrated: 1, skipped: 0, errors: 0 });
