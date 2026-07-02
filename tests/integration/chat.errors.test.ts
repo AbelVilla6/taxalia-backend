@@ -32,7 +32,7 @@ const ENV: Env = {
   CONTACT_EMAIL_TO: 'info@hitaxalia.com',
   CONTACT_EMAIL_FROM: 'LB&Co Global Advisors <info@hitaxalia.com>',
   CONTACT_EMAIL_SUBJECT_PREFIX: '[LB&Co Contact]',
-  CALCOM_URL: 'https://cal.com/taxalia',
+  CALCOM_URL: '/contact',
 };
 
 const ALLOWLIST = ENV.CORS_ALLOWED_ORIGINS.split(',');

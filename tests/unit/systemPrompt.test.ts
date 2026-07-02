@@ -53,10 +53,10 @@ describe('assembleSystemPrompt', () => {
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
       agent: { systemPrompt: 'Agent prompt' },
       skills,
-      bookingUrl: 'https://cal.com/taxalia',
+      bookingUrl: '/contact',
     });
     expect(prompt).toContain('## Booking');
-    expect(prompt).toContain('https://cal.com/taxalia');
+    expect(prompt).toContain('/contact');
   });
 
   it('includes the booking URL in an ES prompt when bookingUrl is provided', () => {
@@ -65,10 +65,10 @@ describe('assembleSystemPrompt', () => {
       conducta: [conduct(1), conduct(2), conduct(3), conduct(4), conduct(5)],
       agent: { systemPrompt: 'Prompt del agente' },
       skills,
-      bookingUrl: 'https://cal.com/taxalia',
+      bookingUrl: '/contact',
     });
     expect(prompt).toContain('## Reserva');
-    expect(prompt).toContain('https://cal.com/taxalia');
+    expect(prompt).toContain('/contact');
   });
 
   it('omits the booking section when bookingUrl is not provided', () => {

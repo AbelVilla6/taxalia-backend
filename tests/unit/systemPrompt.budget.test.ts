@@ -55,7 +55,7 @@ describe('system prompt budget', () => {
           conducta,
           agent: { systemPrompt: financial!.systemPrompt },
           skills: skills.map((s) => ({ id: s.id, description: s.description })),
-          bookingUrl: 'https://cal.com/taxalia/consulta',
+          bookingUrl: '/contact',
         }),
       ).not.toThrow(SystemPromptTooLargeError);
     },

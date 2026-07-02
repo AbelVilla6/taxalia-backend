@@ -55,13 +55,13 @@ describe('loadConfig', () => {
     expect(loadConfig(MYSQL_ENV).CONTACT_EMAIL_TO).toBe('info@hitaxalia.com');
   });
 
-  it('defaults CALCOM_URL to https://cal.com/taxalia', () => {
-    expect(loadConfig(MYSQL_ENV).CALCOM_URL).toBe('https://cal.com/taxalia');
+  it('defaults CALCOM_URL to /contact', () => {
+    expect(loadConfig(MYSQL_ENV).CALCOM_URL).toBe('/contact');
   });
 
   it('accepts a custom CALCOM_URL override', () => {
-    expect(loadConfig({ ...MYSQL_ENV, CALCOM_URL: 'https://cal.com/my-firm' }).CALCOM_URL).toBe(
-      'https://cal.com/my-firm',
+    expect(loadConfig({ ...MYSQL_ENV, CALCOM_URL: 'https://example.com/contact' }).CALCOM_URL).toBe(
+      'https://example.com/contact',
     );
   });
 

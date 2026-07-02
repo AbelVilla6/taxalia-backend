@@ -54,7 +54,7 @@ const EnvSchema = z.object({
   ADMIN_PASSWORD: z.string().trim().min(1).default(DEFAULT_ADMIN_PASSWORD),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
   UPLOAD_DIR: z.string().default('./data/uploads'),
-  CALCOM_URL: z.string().url().default('https://cal.com/taxalia'),
+  CALCOM_URL: z.string().trim().min(1).default('/contact'),
   FRONTEND_SITE_URL: z.string().url().default('http://localhost:4321'),
 });
 
