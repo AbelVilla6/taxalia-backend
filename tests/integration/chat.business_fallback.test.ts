@@ -195,16 +195,21 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .map((e) => e.delta)
       .join('');
     expect(text.length).toBeGreaterThan(0);
-    expect(text).toMatch(/Taxalia|asesor|valoraci|financier/i);
+    expect(text).toContain('Lo siento, no he podido entender tu solicitud.');
+    expect(text).toContain('/contacto');
+    expect(text).toContain('Impuesto sobre la renta');
+    expect(text).toContain('Contabilidad empresarial');
+    expect(text).toContain('Resolución de deudas con el IRS');
+    expect(text).toContain('Agendar una cita');
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
     expect(last.agentResponse).toBe(false);
     expect(last.warning).toBeTruthy();
-    expect(last.warning).toMatch(/Taxalia|asesor|valoraci|financier/i);
+    expect(last.warning).toContain('reservar una consulta gratuita');
   });
 
-  it('emits a visible English warning when the LLM returns [] AND the keyword fallback finds nothing', async () => {
+  it('emits the no-agents fallback with contact link and options in English', async () => {
     const client = makeStubClient({
       orchestratorDecision: { agentsToRun: [], reasoning: '' },
       agentText: 'unused',
@@ -228,28 +233,33 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .map((e) => e.delta)
       .join('');
     expect(text.length).toBeGreaterThan(0);
-    expect(text).toMatch(/Taxalia|advisory|valuation|financial/i);
+    expect(text).toContain("Sorry, I couldn't understand your request.");
+    expect(text).toContain('/contact');
+    expect(text).toContain('Income Tax');
+    expect(text).toContain('Business Accounting');
+    expect(text).toContain('IRS Tax Resolution');
+    expect(text).toContain('Book an Appointment');
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.warning).toBeTruthy();
     expect(last.agentResponse).toBe(false);
+    expect(last.warning).toContain('Please tell me which service I can help you with today.');
   });
 
-  it('includes a booking link in the noAgents delta and warning when bookingUrl is set', async () => {
-    const bookingUrl = 'https://cal.com/taxalia/consulta';
+  it('emits the no-agents fallback with contact link and options in Spanish', async () => {
     const client = makeStubClient({
       orchestratorDecision: { agentsToRun: [], reasoning: '' },
       agentText: 'unused',
     });
     const registry = makeRegistry(makeFullSnapshot(AGENTS));
-    const app = makeAppWithRealPipeline(client, registry, { bookingUrl });
+    const app = makeAppWithRealPipeline(client, registry);
 
     const res = await app.request('http://test/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: [{ role: 'user', content: 'mmm' }],
-        lang: 'en',
+        lang: 'es',
       }),
     });
     expect(res.status).toBe(200);
@@ -259,12 +269,17 @@ describe('POST /chat — business prompt visibility (no empty done regression)',
       .filter((e): e is DeltaEvent => 'delta' in e)
       .map((e) => e.delta)
       .join('');
-    expect(text).toContain(bookingUrl);
+    expect(text).toContain('Lo siento, no he podido entender tu solicitud.');
+    expect(text).toContain('/contacto');
+    expect(text).toContain('Impuesto sobre la renta');
+    expect(text).toContain('Contabilidad empresarial');
+    expect(text).toContain('Resolución de deudas con el IRS');
+    expect(text).toContain('Agendar una cita');
 
     const last = frames[frames.length - 1] as DoneEnvelope;
     expect(last.done).toBe(true);
     expect(last.agentResponse).toBe(false);
-    expect(last.warning).toContain(bookingUrl);
+    expect(last.warning).toContain('reservar una consulta gratuita');
   });
 
   it('keyword fallback routes a Spanish business prompt to an agent when the LLM returns []', async () => {

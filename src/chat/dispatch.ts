@@ -30,21 +30,80 @@ const WARNINGS: Record<
     partial: 'Some agents reported partial failures; the answer may be incomplete.',
     allFailed: 'All agents failed.',
     noAgents:
-      "I couldn't match your question to a Taxalia service. Please mention if you need advisory, valuation, or financial help and I'll route you to the right assistant.",
+      "Sorry, I couldn't understand your request. Please tell me which service I can help you with today.",
   },
   es: {
     partial: 'Algunos agentes han reportado fallos parciales; la respuesta podría estar incompleta.',
     allFailed: 'Todos los agentes fallaron.',
     noAgents:
-      'No he podido identificar a qué servicio de Taxalia corresponde tu pregunta. Indícanos si necesitas asesoría, valoración o ayuda financiera y te derivamos al asistente correcto.',
+      'Lo siento, no he podido entender tu solicitud. Por favor, indica con qué servicio puedo ayudarte hoy.',
   },
 };
 
-/** Sentence appended to the noAgents warning when a booking URL is configured. */
-const BOOKING_SUFFIX: Record<'en' | 'es', (url: string) => string> = {
-  en: (url) => ` If you'd like, you can book a free consultation with our team: ${url}`,
-  es: (url) => ` Si lo prefieres, puedes reservar una consulta gratuita con nuestro equipo: ${url}`,
+const NO_AGENTS_FOLLOWUP: Record<'en' | 'es', string> = {
+  en: 'If you prefer, you can book a free consultation with our advisory team.',
+  es: 'Si lo prefieres, puedes reservar una consulta gratuita con nuestro equipo de asesores.',
 };
+
+const NO_AGENTS_CONTACT: Record<'en' | 'es', { url: string; label: string }> = {
+  en: { url: '/contact', label: 'Book a free consultation' },
+  es: { url: '/contacto', label: 'Reservar una consulta gratuita' },
+};
+
+const NO_AGENTS_OPTIONS: Record<
+  'en' | 'es',
+  Array<{ id: string; label: string; message: string }>
+> = {
+  en: [
+    { id: 'income-tax', label: 'Income Tax', message: 'Tell me about your income tax services' },
+    {
+      id: 'business-accounting',
+      label: 'Business Accounting',
+      message: 'Tell me about your business accounting services',
+    },
+    {
+      id: 'irs-tax-resolution',
+      label: 'IRS Tax Resolution',
+      message: 'Tell me about your IRS tax resolution services',
+    },
+    { id: 'book-appointment', label: 'Book an Appointment', message: "I'd like to book an appointment" },
+  ],
+  es: [
+    {
+      id: 'income-tax',
+      label: 'Impuesto sobre la renta',
+      message: 'Cuéntame sobre sus servicios de impuestos sobre la renta',
+    },
+    {
+      id: 'business-accounting',
+      label: 'Contabilidad empresarial',
+      message: 'Cuéntame sobre sus servicios de contabilidad empresarial',
+    },
+    {
+      id: 'irs-tax-resolution',
+      label: 'Resolución de deudas con el IRS',
+      message: 'Cuéntame sobre sus servicios de resolución de deudas con el IRS',
+    },
+    { id: 'book-appointment', label: 'Agendar una cita', message: 'Quiero agendar una cita' },
+  ],
+};
+
+function buildNoAgentsDelta(lang: 'en' | 'es'): string {
+  const contact = NO_AGENTS_CONTACT[lang];
+  const options = JSON.stringify({ options: NO_AGENTS_OPTIONS[lang] }, null, 2);
+  const booking = JSON.stringify({ url: contact.url, label: contact.label }, null, 2);
+
+  return [
+    WARNINGS[lang].noAgents,
+    NO_AGENTS_FOLLOWUP[lang],
+    '```taxalia-booking-json',
+    booking,
+    '```',
+    '```taxalia-options-json',
+    options,
+    '```',
+  ].join('\n\n');
+}
 
 export type ChatRouteDeps = {
   client: OllamaClient;
@@ -419,7 +478,7 @@ async function* postStreamEvents(
   // `agents: []` and no text.
   if (selectedAgents.length === 0) {
     const base = WARNINGS[lang].noAgents;
-    const message = bookingUrl ? base + BOOKING_SUFFIX[lang](bookingUrl) : base;
+    const message = buildNoAgentsDelta(lang);
     logger.warn(
       { stage: 'stream', path: 'no-agents-selected', lang, messageChars: message.length },
       'no agents selected; emitting localized fallback to user',
@@ -429,7 +488,7 @@ async function* postStreamEvents(
       done: true,
       agentResponse: false,
       agents: [],
-      warning: message,
+      warning: `${base} ${NO_AGENTS_FOLLOWUP[lang]}`,
       requestId,
     };
     return;

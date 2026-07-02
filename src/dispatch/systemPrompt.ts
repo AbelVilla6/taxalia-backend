@@ -8,8 +8,8 @@ const MAX_SYSTEM_PROMPT_TOKENS = 1500;
 const CONDUCT_SEPARATOR = '\n\n---\n\n';
 
 const BASE_IDENTITY: Record<Lang, string> = {
-  en: 'You are Lexi, the AI assistant for Taxalia. Answer clearly, stay within Taxalia services, and hand off to a human when the user needs personalized advice.',
-  es: 'Eres Lexi, la asistente de IA de Taxalia. Responde en castellano de España cuando hables en español. Responde con claridad, mantente dentro de los servicios de Taxalia y deriva a una persona cuando el usuario necesite asesoramiento personalizado.',
+  en: 'You are Lexi, the AI assistant for LB&Co Global Advisors. Answer clearly, stay within LB&Co Global Advisors services, and hand off to a human when the user needs personalized advice.',
+  es: 'Eres Lexi, la asistente de IA de LB&Co Global Advisors. Responde en castellano de España cuando hables en español. Responde con claridad, mantente dentro de los servicios de LB&Co Global Advisors y deriva a una persona cuando el usuario necesite asesoramiento personalizado.',
 };
 
 const RESPONSE_FORMAT: Record<Lang, string> = {
