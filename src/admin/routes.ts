@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -11,13 +10,15 @@ import { LangSchema, PostSchema } from '../content/schema.js';
 import { renderPostHtml } from '../content/markdown.js';
 import type { OllamaClient } from '../ollama/interface.js';
 import type { AuthService } from './auth.js';
+import type { Logger } from '../observability/logger.js';
+import { readRuntimeTextAsset } from './runtimePaths.js';
 
 export const SESSION_COOKIE = 'admin_session';
 
-const TRANSLATE_SKILL_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
+const TRANSLATE_SKILL_CANDIDATES = [
   '../editorial/translate-post.md',
-);
+  '../../src/editorial/translate-post.md',
+] as const;
 
 export interface AdminDeps {
   repo: PostRepository;
@@ -25,6 +26,8 @@ export interface AdminDeps {
   uploadDir: string;
   sessionTtlMs: number;
   cookieSecure: boolean;
+  logger?: Logger;
+  loadTranslateSkill?: () => string;
   /** Optional: enables the editorial translate endpoint. */
   ollama?: OllamaClient;
 }
@@ -200,7 +203,21 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
       return c.json({ error: 'SAME_LANGUAGE' }, 400);
     }
 
-    const skill = readFileSync(TRANSLATE_SKILL_PATH, 'utf8');
+    let skill: string;
+    try {
+      skill = deps.loadTranslateSkill?.() ?? readRuntimeTextAsset(import.meta.url, TRANSLATE_SKILL_CANDIDATES);
+    } catch (err) {
+      deps.logger?.error(
+        {
+          err,
+          requestId: c.get('requestId') ?? 'unknown',
+          candidates: TRANSLATE_SKILL_CANDIDATES,
+        },
+        'Translation prompt unavailable',
+      );
+      return c.json({ error: 'TRANSLATION_PROMPT_UNAVAILABLE' }, 500);
+    }
+
     let raw: string;
     try {
       const response = await deps.ollama.chatOnce({

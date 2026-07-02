@@ -251,7 +251,7 @@ describeMySql('editorial translation', () => {
     uploadDir = '';
   });
 
-  async function setupWithOllama(content: string | Error) {
+  async function setupWithOllama(content: string | Error, loadTranslateSkill?: () => string) {
     db = await openBlogDb(mysqlConfig());
     try {
       await resetBlogTables(db);
@@ -275,6 +275,7 @@ describeMySql('editorial translation', () => {
         '/api/admin',
         buildAdminRouter({
           repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false,
+          loadTranslateSkill,
           ollama: ollama as never,
         }),
       );
@@ -349,6 +350,23 @@ describeMySql('editorial translation', () => {
       }),
     );
     expect(res.status).toBe(503);
+  });
+
+  it('returns a clear error when the translate prompt is unavailable', async () => {
+    const { app } = await setupWithOllama(JSON.stringify({ title: 'ok' }), () => {
+      throw new Error('ENOENT: missing translate prompt');
+    });
+    const token = (await login(app))!;
+
+    const res = await app.fetch(
+      authed(token, '/api/admin/translate', {
+        method: 'POST',
+        body: JSON.stringify({ post: sourcePost, targetLang: 'en' }),
+      }),
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'TRANSLATION_PROMPT_UNAVAILABLE' });
   });
 });
 

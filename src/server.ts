@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 //import { handle } from '@hono/node-server/vercel';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -21,8 +21,15 @@ import { requestIdMiddleware } from './observability/requestId.js';
 import { createOllamaClient } from './ollama/client.js';
 import { Semaphore } from './dispatch/semaphore.js';
 import { ColdStartGate } from './chat/coldStart.js';
+import { resolveExistingPath } from './admin/runtimePaths.js';
 
 //console.error('[BOOT] server.ts top-level');
+
+const ADMIN_PUBLIC_ROOT = resolveExistingPath(import.meta.url, [
+  'admin/public',
+  '../src/admin/public',
+]);
+const ADMIN_INDEX_HTML = join(ADMIN_PUBLIC_ROOT, 'index.html');
 
 function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler {
   return async (c: Context, next) => {
@@ -203,6 +210,7 @@ export async function createApp(env: Env, registry = createArtifactRegistry()): 
         uploadDir: env.UPLOAD_DIR,
         sessionTtlMs: env.SESSION_TTL_HOURS * 3_600_000,
         cookieSecure: process.env.NODE_ENV === 'production',
+        logger,
         ollama: client,
       }),
     );
@@ -212,11 +220,11 @@ export async function createApp(env: Env, registry = createArtifactRegistry()): 
     mkdirSync(resolve(env.UPLOAD_DIR), { recursive: true });
 
     // Admin panel (static SPA + assets) + uploaded media.
-    app.get('/admin', serveStatic({ path: './src/admin/public/index.html' }));
+    app.get('/admin', serveStatic({ path: ADMIN_INDEX_HTML }));
     app.use(
       '/admin/*',
       serveStatic({
-        root: './src/admin/public',
+        root: ADMIN_PUBLIC_ROOT,
         rewriteRequestPath: (p) => p.replace(/^\/admin/, ''),
       }),
     );
