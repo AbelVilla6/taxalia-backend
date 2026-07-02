@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "blog:export": "tsx scripts/export-posts.ts",
     "blog:import": "tsx scripts/import-posts.ts",
-    "blog:import:dry": "tsx scripts/import-posts.ts data/posts-export.json --dry-run"
+    "blog:import:dry": "tsx scripts/import-posts.ts data/posts-export.json --dry-run",
+    "blog:migrate:sqlite": "tsx scripts/migrate-sqlite-blog.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",
@@ -34,6 +35,7 @@
     "@types/node": "24.0.0",
     "@types/nodemailer": "^8.0.0",
     "@types/sanitize-html": "^2.16.1",
+    "better-sqlite3": "^12.11.1",
     "tsx": "^4.22.4",
     "typescript": "5.6.3",
     "vitest": "4.1.8"
