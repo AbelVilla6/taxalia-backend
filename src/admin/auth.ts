@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { BlogDatabase } from '../content/db.js';
+import { execute, queryOne } from '../content/db.js';
 
 const SCRYPT_KEYLEN = 64;
 
@@ -30,7 +31,7 @@ function verifyPassword(password: string, salt: string, expected: string): boole
 /**
  * Session-based auth for the admin panel. Passwords are hashed with scrypt
  * (Node built-in, no native dependency). Sessions are opaque random tokens
- * stored in SQLite and carried in an httpOnly cookie.
+ * stored in MySQL and carried in an httpOnly cookie.
  */
 export class AuthService {
   constructor(
@@ -42,41 +43,49 @@ export class AuthService {
    * Creates the admin user from env credentials if it does not exist yet.
    * Seeded accounts are flagged to force a password change on first login.
    */
-  ensureAdminUser(username: string, password: string): void {
-    const existing = this.db
-      .prepare('SELECT id FROM users WHERE username = ?')
-      .get(username);
+  async ensureAdminUser(username: string, password: string): Promise<void> {
+    const existing = await queryOne<{ id: number }>(
+      this.db,
+      'SELECT id FROM users WHERE username = ? LIMIT 1',
+      [username],
+    );
     if (existing) return;
 
     const salt = randomBytes(16).toString('hex');
-    this.db
-      .prepare(
-        'INSERT INTO users (username, password_hash, salt, must_change_password) VALUES (?, ?, ?, 1)',
-      )
-      .run(username, hashPassword(password, salt), salt);
+    await execute(
+      this.db,
+      'INSERT INTO users (username, password_hash, salt, must_change_password) VALUES (?, ?, ?, 1)',
+      [username, hashPassword(password, salt), salt],
+    );
   }
 
   /** Verifies credentials and opens a session. Returns null on bad credentials. */
-  login(username: string, password: string): LoginResult | null {
-    const user = this.db
-      .prepare('SELECT * FROM users WHERE username = ?')
-      .get(username) as UserRow | undefined;
+  async login(username: string, password: string): Promise<LoginResult | null> {
+    const user = await queryOne<UserRow>(
+      this.db,
+      'SELECT * FROM users WHERE username = ? LIMIT 1',
+      [username],
+    );
     if (!user) return null;
     if (!verifyPassword(password, user.salt, user.password_hash)) return null;
 
     const token = randomBytes(32).toString('hex');
     const expiresAt = Date.now() + this.sessionTtlMs;
-    this.db
-      .prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)')
-      .run(token, user.id, expiresAt);
+    await execute(this.db, 'INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', [
+      token,
+      user.id,
+      expiresAt,
+    ]);
     return { token, mustChangePassword: user.must_change_password === 1 };
   }
 
   /** Whether the user is still required to replace the seeded password. */
-  mustChangePassword(username: string): boolean {
-    const row = this.db
-      .prepare('SELECT must_change_password AS flag FROM users WHERE username = ?')
-      .get(username) as { flag: number } | undefined;
+  async mustChangePassword(username: string): Promise<boolean> {
+    const row = await queryOne<{ flag: number }>(
+      this.db,
+      'SELECT must_change_password AS flag FROM users WHERE username = ? LIMIT 1',
+      [username],
+    );
     return row?.flag === 1;
   }
 
@@ -84,44 +93,46 @@ export class AuthService {
    * Replaces the password after verifying the current one and clears the
    * first-login flag. Returns false when the current password is wrong.
    */
-  changePassword(username: string, currentPassword: string, newPassword: string): boolean {
-    const user = this.db
-      .prepare('SELECT * FROM users WHERE username = ?')
-      .get(username) as UserRow | undefined;
+  async changePassword(username: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    const user = await queryOne<UserRow>(
+      this.db,
+      'SELECT * FROM users WHERE username = ? LIMIT 1',
+      [username],
+    );
     if (!user) return false;
     if (!verifyPassword(currentPassword, user.salt, user.password_hash)) return false;
 
     const salt = randomBytes(16).toString('hex');
-    this.db
-      .prepare(
-        'UPDATE users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE id = ?',
-      )
-      .run(hashPassword(newPassword, salt), salt, user.id);
+    await execute(
+      this.db,
+      'UPDATE users SET password_hash = ?, salt = ?, must_change_password = 0 WHERE id = ?',
+      [hashPassword(newPassword, salt), salt, user.id],
+    );
     return true;
   }
 
   /** Returns the username for a valid, unexpired session token, else null. */
-  validate(token: string | undefined): string | null {
+  async validate(token: string | undefined): Promise<string | null> {
     if (!token) return null;
-    const row = this.db
-      .prepare(
-        `SELECT s.expires_at AS expiresAt, u.username AS username
-         FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token = ?`,
-      )
-      .get(token) as { expiresAt: number; username: string } | undefined;
+    const row = await queryOne<{ expiresAt: number; username: string }>(
+      this.db,
+      `SELECT s.expires_at AS expiresAt, u.username AS username
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token = ?`,
+      [token],
+    );
 
     if (!row) return null;
     if (row.expiresAt < Date.now()) {
-      this.logout(token);
+      await this.logout(token);
       return null;
     }
     return row.username;
   }
 
   /** Destroys a session. */
-  logout(token: string | undefined): void {
+  async logout(token: string | undefined): Promise<void> {
     if (!token) return;
-    this.db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    await execute(this.db, 'DELETE FROM sessions WHERE token = ?', [token]);
   }
 }

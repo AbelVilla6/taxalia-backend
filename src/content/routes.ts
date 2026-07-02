@@ -17,23 +17,23 @@ function resolveLang(c: Context): ReturnType<typeof LangSchema.safeParse> {
 export function buildContentRouter(repo: PostRepository): Hono {
   const app = new Hono();
 
-  app.get('/posts', (c: Context) => {
+  app.get('/posts', async (c: Context) => {
     const lang = resolveLang(c);
     if (!lang.success) {
       return c.json({ error: 'INVALID_LANG', allowed: ['en', 'es'] }, 400);
     }
 
-    return c.json({ lang: lang.data, posts: repo.list(lang.data) });
+    return c.json({ lang: lang.data, posts: await repo.list(lang.data) });
   });
 
-  app.get('/posts/:slug', (c: Context) => {
+  app.get('/posts/:slug', async (c: Context) => {
     const lang = resolveLang(c);
     if (!lang.success) {
       return c.json({ error: 'INVALID_LANG', allowed: ['en', 'es'] }, 400);
     }
 
     const slug = c.req.param('slug') ?? '';
-    const post = repo.get(slug, lang.data);
+    const post = await repo.get(slug, lang.data);
     if (!post) {
       return c.json({ error: 'POST_NOT_FOUND', slug, lang: lang.data }, 404);
     }

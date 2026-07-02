@@ -1,30 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Hono } from 'hono';
-import { openBlogDb } from '../../src/content/db.js';
+import { closeBlogDb, openBlogDb } from '../../src/content/db.js';
 import { PostRepository } from '../../src/content/repository.js';
 import { AuthService } from '../../src/admin/auth.js';
 import { buildAdminRouter, SESSION_COOKIE } from '../../src/admin/routes.js';
+import { describeMySql, mysqlConfig, resetBlogTables } from './mysql.js';
 
-function setup({ firstLoginDone = true } = {}) {
-  const db = openBlogDb(':memory:');
-  const repo = new PostRepository(db);
-  const auth = new AuthService(db, 3_600_000);
-  auth.ensureAdminUser('admin', 'secret123');
-  if (firstLoginDone) {
-    // Seeded admins must change their password; complete that step so the
-    // rest of the suite exercises a fully provisioned account.
-    auth.changePassword('admin', 'secret123', 'secret123');
+async function setup({ firstLoginDone = true } = {}) {
+  const db = await openBlogDb(mysqlConfig());
+  try {
+    await resetBlogTables(db);
+    const repo = new PostRepository(db);
+    const auth = new AuthService(db, 3_600_000);
+    await auth.ensureAdminUser('admin', 'secret123');
+    if (firstLoginDone) {
+      // Seeded admins must change their password; complete that step so the
+      // rest of the suite exercises a fully provisioned account.
+      await auth.changePassword('admin', 'secret123', 'secret123');
+    }
+    const uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
+    const app = new Hono();
+    app.route(
+      '/api/admin',
+      buildAdminRouter({ repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false }),
+    );
+    return { app, db, repo, uploadDir };
+  } catch (error) {
+    await closeBlogDb(db);
+    throw error;
   }
-  const uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
-  const app = new Hono();
-  app.route(
-    '/api/admin',
-    buildAdminRouter({ repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false }),
-  );
-  return { app, repo, uploadDir };
 }
 
 async function login(app: Hono, password = 'secret123'): Promise<string | null> {
@@ -62,16 +69,26 @@ async function upload(app: Hono, token: string, file: File): Promise<Response> {
   );
 }
 
-describe('admin API', () => {
+describeMySql('admin API', () => {
+  let db: Awaited<ReturnType<typeof openBlogDb>> | undefined;
   let app: Hono;
-  let uploadDir: string;
+  let uploadDir = '';
 
-  beforeEach(() => {
-    ({ app, uploadDir } = setup());
+  beforeEach(async () => {
+    ({ db, app, uploadDir } = await setup());
   });
 
-  afterEach(() => {
-    rmSync(uploadDir, { recursive: true, force: true });
+  afterEach(async () => {
+    if (db) {
+      try {
+        await resetBlogTables(db);
+      } finally {
+        await closeBlogDb(db);
+        db = undefined;
+      }
+    }
+    if (uploadDir) rmSync(uploadDir, { recursive: true, force: true });
+    uploadDir = '';
   });
 
   it('rejects unauthenticated access', async () => {
@@ -160,16 +177,26 @@ describe('admin API', () => {
   });
 });
 
-describe('custom JSON-LD', () => {
+describeMySql('custom JSON-LD', () => {
+  let db: Awaited<ReturnType<typeof openBlogDb>> | undefined;
   let app: Hono;
-  let uploadDir: string;
+  let uploadDir = '';
 
-  beforeEach(() => {
-    ({ app, uploadDir } = setup());
+  beforeEach(async () => {
+    ({ db, app, uploadDir } = await setup());
   });
 
-  afterEach(() => {
-    rmSync(uploadDir, { recursive: true, force: true });
+  afterEach(async () => {
+    if (db) {
+      try {
+        await resetBlogTables(db);
+      } finally {
+        await closeBlogDb(db);
+        db = undefined;
+      }
+    }
+    if (uploadDir) rmSync(uploadDir, { recursive: true, force: true });
+    uploadDir = '';
   });
 
   const base = {
@@ -207,39 +234,55 @@ describe('custom JSON-LD', () => {
   });
 });
 
-describe('editorial translation', () => {
-  let uploadDir: string;
+describeMySql('editorial translation', () => {
+  let db: Awaited<ReturnType<typeof openBlogDb>> | undefined;
+  let uploadDir = '';
 
-  afterEach(() => {
-    rmSync(uploadDir, { recursive: true, force: true });
+  afterEach(async () => {
+    if (db) {
+      try {
+        await resetBlogTables(db);
+      } finally {
+        await closeBlogDb(db);
+        db = undefined;
+      }
+    }
+    if (uploadDir) rmSync(uploadDir, { recursive: true, force: true });
+    uploadDir = '';
   });
 
-  function setupWithOllama(content: string | Error) {
-    const db = openBlogDb(':memory:');
-    const repo = new PostRepository(db);
-    const auth = new AuthService(db, 3_600_000);
-    auth.ensureAdminUser('admin', 'secret123');
-    auth.changePassword('admin', 'secret123', 'secret123');
-    uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
-    const calls: { system: string; user: string }[] = [];
-    const ollama = {
-      async chatOnce(args: { system: string; messages: { content: string }[] }) {
-        calls.push({ system: args.system, user: args.messages[0]?.content ?? '' });
-        if (content instanceof Error) throw content;
-        return { content };
-      },
-      chatStream: () => { throw new Error('not used'); },
-      checkModel: async () => {},
-    };
-    const app = new Hono();
-    app.route(
-      '/api/admin',
-      buildAdminRouter({
-        repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false,
-        ollama: ollama as never,
-      }),
-    );
-    return { app, calls };
+  async function setupWithOllama(content: string | Error) {
+    db = await openBlogDb(mysqlConfig());
+    try {
+      await resetBlogTables(db);
+      const repo = new PostRepository(db);
+      const auth = new AuthService(db, 3_600_000);
+      await auth.ensureAdminUser('admin', 'secret123');
+      await auth.changePassword('admin', 'secret123', 'secret123');
+      uploadDir = mkdtempSync(join(tmpdir(), 'taxalia-admin-'));
+      const calls: { system: string; user: string }[] = [];
+      const ollama = {
+        async chatOnce(args: { system: string; messages: { content: string }[] }) {
+          calls.push({ system: args.system, user: args.messages[0]?.content ?? '' });
+          if (content instanceof Error) throw content;
+          return { content };
+        },
+        chatStream: () => { throw new Error('not used'); },
+        checkModel: async () => {},
+      };
+      const app = new Hono();
+      app.route(
+        '/api/admin',
+        buildAdminRouter({
+          repo, auth, uploadDir, sessionTtlMs: 3_600_000, cookieSecure: false,
+          ollama: ollama as never,
+        }),
+      );
+      return { app, calls };
+    } catch (error) {
+      await closeBlogDb(db);
+      throw error;
+    }
   }
 
   const sourcePost = {
@@ -261,7 +304,7 @@ describe('editorial translation', () => {
       tags: ['FBAR', 'IRS'],
       jsonLd: '{"@context":"https://schema.org","@type":"FAQPage"}',
     };
-    const { app, calls } = setupWithOllama(JSON.stringify(translated));
+    const { app, calls } = await setupWithOllama(JSON.stringify(translated));
     const token = (await login(app))!;
 
     const res = await app.fetch(
@@ -284,7 +327,7 @@ describe('editorial translation', () => {
   });
 
   it('502s when the model returns unparseable output', async () => {
-    const { app } = setupWithOllama('this is not json');
+    const { app } = await setupWithOllama('this is not json');
     const token = (await login(app))!;
     const res = await app.fetch(
       authed(token, '/api/admin/translate', {
@@ -297,7 +340,7 @@ describe('editorial translation', () => {
 
   it('503s when no Ollama client is configured', async () => {
     let app: Hono;
-    ({ app, uploadDir } = setup());
+    ({ app, uploadDir } = await setup());
     const token = (await login(app))!;
     const res = await app.fetch(
       authed(token, '/api/admin/translate', {
@@ -309,12 +352,12 @@ describe('editorial translation', () => {
   });
 });
 
-describe('first-login password change', () => {
+describeMySql('first-login password change', () => {
   let app: Hono;
   let uploadDir: string;
 
-  beforeEach(() => {
-    ({ app, uploadDir } = setup({ firstLoginDone: false }));
+  beforeEach(async () => {
+    ({ app, uploadDir } = await setup({ firstLoginDone: false }));
   });
 
   afterEach(() => {

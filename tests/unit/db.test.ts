@@ -1,157 +1,109 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { ensureBlogSchema, openBlogDb } from '../../src/content/db.js';
+import { ensureBlogSchema, mysqlConfigFromEnv, openBlogDb, type BlogDatabase } from '../../src/content/db.js';
 
-function createLegacyDb(path = ':memory:'): Database.Database {
-  const db = new Database(path);
-  db.exec(`
-    CREATE TABLE posts (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      slug            TEXT NOT NULL,
-      lang            TEXT NOT NULL CHECK (lang IN ('en', 'es')),
-      translation_key TEXT NOT NULL,
-      title           TEXT NOT NULL,
-      description     TEXT NOT NULL DEFAULT '',
-      body_md         TEXT NOT NULL DEFAULT '',
-      body_html       TEXT NOT NULL DEFAULT '',
-      author          TEXT NOT NULL DEFAULT 'Taxalia',
-      hero_image      TEXT,
-      hero_alt        TEXT,
-      tags            TEXT NOT NULL DEFAULT '[]',
-      draft           INTEGER NOT NULL DEFAULT 0,
-      pub_date        TEXT NOT NULL,
-      updated_date    TEXT,
-      UNIQUE (slug, lang)
-    );
-  `);
+const MYSQL_ENV = {
+  MYSQL_HOST: '127.0.0.1',
+  MYSQL_PORT: 3306,
+  MYSQL_USER: 'taxalia',
+  MYSQL_PASSWORD: '',
+  MYSQL_DATABASE: 'taxalia_test',
+  MYSQL_CONNECTION_LIMIT: 1,
+  MYSQL_SSL: false,
+} as const;
 
-  db.prepare(
-    `INSERT INTO posts
-      (slug, lang, translation_key, title, description, body_md, body_html, author, hero_image, hero_alt, tags, draft, pub_date, updated_date)
-     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run('published', 'en', 'group-a', 'Published', '', '# Hello', '<h1>Hello</h1>', 'Taxalia', null, null, '[]', 0, '2026-01-01', null);
+const MYSQL_CONFIG = {
+  host: MYSQL_ENV.MYSQL_HOST,
+  port: MYSQL_ENV.MYSQL_PORT,
+  user: MYSQL_ENV.MYSQL_USER,
+  password: MYSQL_ENV.MYSQL_PASSWORD,
+  database: MYSQL_ENV.MYSQL_DATABASE,
+  connectionLimit: MYSQL_ENV.MYSQL_CONNECTION_LIMIT,
+  ssl: MYSQL_ENV.MYSQL_SSL,
+} as const;
 
-  db.prepare(
-    `INSERT INTO posts
-      (slug, lang, translation_key, title, description, body_md, body_html, author, hero_image, hero_alt, tags, draft, pub_date, updated_date)
-     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run('draft', 'es', 'group-b', 'Draft', '', '# Hola', '<h1>Hola</h1>', 'Taxalia', null, null, '[]', 1, '2026-01-02', null);
+function makeFakeDb() {
+  const calls: Array<{ kind: 'query' | 'execute'; sql: string; params: unknown[] }> = [];
 
-  return db;
+  const db = {
+    async execute(sql: string, params: unknown[] = []) {
+      calls.push({ kind: 'execute', sql, params });
+      return [{} as never, undefined as never] as const;
+    },
+    async query(sql: string, params: unknown[] = []) {
+      calls.push({ kind: 'query', sql, params });
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      const emptyRows = [] as never[];
+
+      if (normalized.includes('FROM information_schema.COLUMNS')) {
+        return [emptyRows, undefined as never] as const;
+      }
+
+      if (normalized.includes('FROM information_schema.STATISTICS')) {
+        return [emptyRows, undefined as never] as const;
+      }
+
+      if (normalized.includes('SELECT translation_group_id AS id')) {
+        return [[
+          { id: 'group-a', has_draft: 0 },
+          { id: 'group-b', has_draft: 1 },
+        ] as never[], undefined as never] as const;
+      }
+
+      return [emptyRows, undefined as never] as const;
+    },
+  } as unknown as BlogDatabase;
+
+  return { db, calls };
 }
 
+describe('mysqlConfigFromEnv', () => {
+  it('maps env values to pool options without rewriting credentials', () => {
+    expect(mysqlConfigFromEnv(MYSQL_ENV)).toEqual({
+      host: '127.0.0.1',
+      port: 3306,
+      user: 'taxalia',
+      password: '',
+      database: 'taxalia_test',
+      connectionLimit: 1,
+      ssl: false,
+    });
+  });
+});
+
 describe('openBlogDb', () => {
-  it('opens a legacy database created before translation groups existed', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'blog-db-'));
-    const path = join(dir, 'blog.db');
-    createLegacyDb(path).close();
+  it('rejects blank MYSQL_USER before opening a pool', async () => {
+    await expect(
+      openBlogDb({ ...MYSQL_CONFIG, user: '   ' }),
+    ).rejects.toThrow('MYSQL_USER is required');
+  });
 
-    try {
-      const db = openBlogDb(path);
-
-      const rows = db
-        .prepare('SELECT slug, translation_group_id FROM posts ORDER BY slug')
-        .all() as { slug: string; translation_group_id: string }[];
-
-      expect(rows).toEqual([
-        { slug: 'draft', translation_group_id: 'group-b' },
-        { slug: 'published', translation_group_id: 'group-a' },
-      ]);
-
-      db.close();
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it('rejects blank MYSQL_DATABASE before opening a pool', async () => {
+    await expect(
+      openBlogDb({ ...MYSQL_CONFIG, database: '  ' }),
+    ).rejects.toThrow('MYSQL_DATABASE is required');
   });
 });
 
 describe('ensureBlogSchema', () => {
-  it('adds translation groups and backfills published groups conservatively', () => {
-    const db = createLegacyDb();
+  it('creates tables, backfills migration columns, and syncs translation groups', async () => {
+    const { db, calls } = makeFakeDb();
 
-    ensureBlogSchema(db);
+    await ensureBlogSchema(db);
 
-    const columns = db.prepare('PRAGMA table_info(posts)').all() as { name: string }[];
-    expect(columns.map((column) => column.name)).toEqual(
-      expect.arrayContaining([
-        'translation_group_id',
-        'meta_title',
-        'meta_description',
-        'focus_keyword',
-        'secondary_keywords',
-        'open_graph_image',
-        'open_graph_title',
-        'open_graph_description',
-        'toc_json',
-      ]),
+    const executedSql = calls.filter((call) => call.kind === 'execute').map((call) => call.sql);
+    expect(executedSql.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS posts'))).toBe(true);
+    expect(executedSql.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS users'))).toBe(true);
+    expect(executedSql.some((sql) => sql.includes('ALTER TABLE `posts` ADD COLUMN `json_ld` LONGTEXT NULL'))).toBe(true);
+    expect(executedSql.some((sql) => sql.includes('ALTER TABLE `posts` ADD INDEX `idx_posts_lang_pubdate` (lang, draft, pub_date DESC)'))).toBe(true);
+    expect(executedSql.some((sql) => sql.includes('UPDATE posts'))).toBe(true);
+
+    const translationGroupCalls = calls.filter(
+      (call) =>
+        call.kind === 'execute' &&
+        call.sql.startsWith('INSERT INTO translation_groups (id, published)'),
     );
-
-    const groups = db
-      .prepare('SELECT id, published FROM translation_groups ORDER BY id')
-      .all() as { id: string; published: number }[];
-
-    expect(groups).toEqual([
-      { id: 'group-a', published: 1 },
-      { id: 'group-b', published: 0 },
-    ]);
-
-    const rows = db
-      .prepare('SELECT slug, translation_group_id FROM posts ORDER BY slug')
-      .all() as { slug: string; translation_group_id: string }[];
-
-    expect(rows).toEqual([
-      { slug: 'draft', translation_group_id: 'group-b' },
-      { slug: 'published', translation_group_id: 'group-a' },
-    ]);
-  });
-
-  it('keeps fully published groups published', () => {
-    const db = new Database(':memory:');
-    db.exec(`
-      CREATE TABLE posts (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        slug            TEXT NOT NULL,
-        lang            TEXT NOT NULL CHECK (lang IN ('en', 'es')),
-        translation_key TEXT NOT NULL,
-        title           TEXT NOT NULL,
-        description     TEXT NOT NULL DEFAULT '',
-        body_md         TEXT NOT NULL DEFAULT '',
-        body_html       TEXT NOT NULL DEFAULT '',
-        author          TEXT NOT NULL DEFAULT 'Taxalia',
-        hero_image      TEXT,
-        hero_alt        TEXT,
-        tags            TEXT NOT NULL DEFAULT '[]',
-        draft           INTEGER NOT NULL DEFAULT 0,
-        pub_date        TEXT NOT NULL,
-        updated_date    TEXT,
-        UNIQUE (slug, lang)
-      );
-    `);
-    db.prepare(
-      `INSERT INTO posts
-        (slug, lang, translation_key, title, description, body_md, body_html, author, hero_image, hero_alt, tags, draft, pub_date, updated_date)
-       VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run('en-a', 'en', 'group-c', 'A', '', '', '', 'Taxalia', null, null, '[]', 0, '2026-01-03', null);
-    db.prepare(
-      `INSERT INTO posts
-        (slug, lang, translation_key, title, description, body_md, body_html, author, hero_image, hero_alt, tags, draft, pub_date, updated_date)
-       VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run('es-a', 'es', 'group-c', 'B', '', '', '', 'Taxalia', null, null, '[]', 0, '2026-01-03', null);
-
-    ensureBlogSchema(db);
-
-    const group = db.prepare('SELECT id, published FROM translation_groups WHERE id = ?').get('group-c') as {
-      id: string;
-      published: number;
-    };
-
-    expect(group).toEqual({ id: 'group-c', published: 1 });
+    expect(translationGroupCalls).toHaveLength(2);
+    expect(translationGroupCalls[0]?.params).toEqual(['group-a', 1]);
+    expect(translationGroupCalls[1]?.params).toEqual(['group-b', 0]);
   });
 });

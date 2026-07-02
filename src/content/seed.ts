@@ -154,11 +154,12 @@ const SEED_POSTS: Post[] = [
   },
 ];
 
-/** Seeds example bilingual posts into an empty database (idempotent). */
-export function seedIfEmpty(repo: PostRepository): boolean {
-  if (repo.count() > 0) return false;
+/** Seeds example bilingual posts into an empty database when explicitly enabled. */
+export async function seedIfEmpty(repo: PostRepository, enabled = false): Promise<boolean> {
+  if (!enabled) return false;
+  if ((await repo.count()) > 0) return false;
   for (const post of SEED_POSTS) {
-    repo.upsert(post);
+    await repo.upsert(post);
   }
   return true;
 }

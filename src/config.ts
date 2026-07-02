@@ -2,6 +2,9 @@ import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import { DEFAULT_LOCAL_MODEL, DEFAULT_PRODUCTION_MODEL } from './ollama/models.js';
 
+export const DEFAULT_ADMIN_USERNAME = 'admin';
+export const DEFAULT_ADMIN_PASSWORD = 'change-me-now';
+
 const BooleanFromEnvSchema = z.preprocess((value) => {
   if (typeof value === 'string') {
     return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
@@ -16,6 +19,14 @@ const EnvSchema = z.object({
   OLLAMA_MODEL: z.string().optional(),
   PORT: z.coerce.number().int().positive().default(4324),
   OLLAMA_AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  MYSQL_HOST: z.string().trim().min(1).default('localhost'),
+  MYSQL_PORT: z.coerce.number().int().positive().default(3306),
+  MYSQL_USER: z.string().trim().min(1),
+  MYSQL_PASSWORD: z.string().default(''),
+  MYSQL_DATABASE: z.string().trim().min(1),
+  MYSQL_CONNECTION_LIMIT: z.coerce.number().int().positive().default(10),
+  MYSQL_SSL: BooleanFromEnvSchema.default(false),
+  SEED_DEMO_CONTENT: BooleanFromEnvSchema.default(false),
   SMTP_HOST: z.string().trim().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_SECURE: BooleanFromEnvSchema.default(false),
@@ -35,13 +46,12 @@ const EnvSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
   DISPATCH_CONCURRENCY_CAP: z.coerce.number().int().positive().default(2),
-  BLOG_DB_PATH: z.string().default('./data/blog.db'),
   SKIP_OLLAMA_CHECK: z
     .string()
     .optional()
     .transform((v) => v === '1' || v === 'true'),
-  ADMIN_USERNAME: z.string().default('admin'),
-  ADMIN_PASSWORD: z.string().default('change-me-now'),
+  ADMIN_USERNAME: z.string().trim().min(1).default(DEFAULT_ADMIN_USERNAME),
+  ADMIN_PASSWORD: z.string().trim().min(1).default(DEFAULT_ADMIN_PASSWORD),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
   UPLOAD_DIR: z.string().default('./data/uploads'),
   CALCOM_URL: z.string().url().default('https://cal.com/taxalia'),
@@ -64,6 +74,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Env {
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
+
+  validateProductionAdminCredentials(parsed.data, source.NODE_ENV);
   return {
     ...parsed.data,
     OLLAMA_HOST: parsed.data.OLLAMA_HOST ?? defaultOllamaHost(source.NODE_ENV),
@@ -87,6 +99,25 @@ function defaultOllamaHost(nodeEnv: string | undefined): string {
 
 function defaultOllamaModel(nodeEnv: string | undefined): string {
   return nodeEnv === 'production' ? DEFAULT_PRODUCTION_MODEL : DEFAULT_LOCAL_MODEL;
+}
+
+export function validateProductionAdminCredentials(
+  env: Pick<Env, 'ADMIN_USERNAME' | 'ADMIN_PASSWORD'>,
+  nodeEnv: string | undefined,
+): void {
+  if (nodeEnv !== 'production') return;
+
+  const issues: string[] = [];
+  if (env.ADMIN_USERNAME === DEFAULT_ADMIN_USERNAME) {
+    issues.push('ADMIN_USERNAME must be set to a non-default value in production');
+  }
+  if (env.ADMIN_PASSWORD === DEFAULT_ADMIN_PASSWORD) {
+    issues.push('ADMIN_PASSWORD must be set to a non-default value in production');
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid environment configuration:\n${issues.map((issue) => `  - ${issue}`).join('\n')}`);
+  }
 }
 
 export function corsAllowlist(env: Env): string[] {

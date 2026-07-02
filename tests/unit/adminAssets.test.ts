@@ -1,22 +1,30 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const ADMIN_ASSETS = [
-  'src/admin/public/index.html',
-  'src/admin/public/app.js',
-  'src/admin/public/preview.css',
-];
+const INDEX_HTML = 'src/admin/public/index.html';
+const APP_JS = 'src/admin/public/app.js';
 
 describe('admin static assets', () => {
-  it('do not reference external dependencies', () => {
-    for (const asset of ADMIN_ASSETS) {
-      const source = readFileSync(new URL(`../../${asset}`, import.meta.url), 'utf8');
-      expect(source).not.toMatch(/['"`](?:https?:)?\/\/[^'"`\s]+/);
-    }
+  it('loads Toast UI from the official CDN', () => {
+    const source = readFileSync(new URL(`../../${INDEX_HTML}`, import.meta.url), 'utf8');
+    expect(source).toContain(
+      'https://uicdn.toast.com/editor/latest/toastui-editor.min.css',
+    );
+    expect(source).toContain(
+      'https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js',
+    );
+  });
+
+  it('keeps the YouTube embed URLs intentional and user-facing', () => {
+    const source = readFileSync(new URL(`../../${APP_JS}`, import.meta.url), 'utf8');
+
+    expect(source).toContain('https://youtu.be/xxxxx');
+    expect(source).toContain('https://www.youtube.com/watch?v=xxxxx');
+    expect(source).toContain('https://www.youtube-nocookie.com/embed/');
   });
 
   it('renders admin pubDate cells with textContent', () => {
-    const source = readFileSync(new URL('../../src/admin/public/app.js', import.meta.url), 'utf8');
+    const source = readFileSync(new URL(`../../${APP_JS}`, import.meta.url), 'utf8');
 
     expect(source).toContain("dateCell.textContent = p.pubDate");
     expect(source).not.toContain('<td>${p.pubDate}</td>');

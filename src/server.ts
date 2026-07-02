@@ -5,12 +5,12 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
-import { loadConfig, type Env } from './config.js';
+import { loadConfig, validateProductionAdminCredentials, type Env } from './config.js';
 import { buildContactRouter } from './contact/routes.js';
 import { createContactSender } from './contact/mail.js';
 import { buildChatRouter } from './chat/routes.js';
 import { createArtifactRegistry } from './loaders/registry.js';
-import { openBlogDb } from './content/db.js';
+import { mysqlConfigFromEnv, openBlogDb, type BlogDatabase } from './content/db.js';
 import { PostRepository } from './content/repository.js';
 import { buildContentRouter } from './content/routes.js';
 import { seedIfEmpty } from './content/seed.js';
@@ -62,9 +62,17 @@ function createCorsGuard(allowlist: string[], logger: Logger): MiddlewareHandler
   };
 }
 
-export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
+export async function createApp(env: Env, registry = createArtifactRegistry()): Promise<Hono> {
   const app = new Hono();
   const logger = getDefaultLogger();
+
+  validateProductionAdminCredentials(
+    {
+      ADMIN_USERNAME: env.ADMIN_USERNAME,
+      ADMIN_PASSWORD: env.ADMIN_PASSWORD,
+    },
+    process.env.NODE_ENV,
+  );
 
   app.onError((err, c) => {
     logger.error(
@@ -168,15 +176,15 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     }),
   );
 
-  // Blog content store + public read API (/api/posts). Guarded so a missing or
-  // read-only filesystem (e.g. serverless) disables the blog API without
-  // taking down the chat backend.
+  // Blog content store + public read API (/api/posts). In non-production,
+  // failures can disable the blog API so chat can still boot; production
+  // rethrows so bad MySQL config fails startup loudly.
   try {
-    const db = openBlogDb(env.BLOG_DB_PATH);
+    const db: BlogDatabase = await openBlogDb(mysqlConfigFromEnv(env));
     const repo = new PostRepository(db, env.FRONTEND_SITE_URL);
-    const seeded = seedIfEmpty(repo);
+    const seeded = await seedIfEmpty(repo, env.SEED_DEMO_CONTENT);
     logger.info(
-      { dbPath: env.BLOG_DB_PATH, seeded },
+      { mysqlHost: env.MYSQL_HOST, mysqlDatabase: env.MYSQL_DATABASE, seeded },
       'blog content store ready',
     );
 
@@ -185,13 +193,7 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
 
     // Admin: auth + write API + media, plus the panel UI it serves.
     const auth = new AuthService(db, env.SESSION_TTL_HOURS * 3_600_000);
-    auth.ensureAdminUser(env.ADMIN_USERNAME, env.ADMIN_PASSWORD);
-    if (
-      process.env.NODE_ENV === 'production' &&
-      env.ADMIN_PASSWORD === 'change-me-now'
-    ) {
-      logger.warn('ADMIN_PASSWORD is the default value in production. Set a strong ADMIN_PASSWORD.');
-    }
+    await auth.ensureAdminUser(env.ADMIN_USERNAME, env.ADMIN_PASSWORD);
 
     app.route(
       '/api/admin',
@@ -227,6 +229,9 @@ export function createApp(env: Env, registry = createArtifactRegistry()): Hono {
     );
   } catch (err) {
     logger.error({ err }, 'blog content store unavailable; /api disabled');
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
   }
 
   return app;
@@ -279,7 +284,7 @@ async function main() {
       }
   }
 
-  const app = createApp(env, registry);
+  const app = await createApp(env, registry);
   logger.info('boot 10: app created');
 
   serve({ fetch: app.fetch, port: Number(env.PORT) }, (info) => {
@@ -297,5 +302,6 @@ const app = createApp(env, registry);
 export default handle(app);*/
 
 main().catch((err) => {
+  console.error(err);
   process.exit(1);
 });

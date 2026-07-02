@@ -21,9 +21,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.14",
-    "better-sqlite3": "^12.10.0",
     "hono": "^4.12.23",
     "marked": "^18.0.5",
+    "mysql2": "^3.14.4",
     "nodemailer": "^9.0.1",
     "ollama": "0.6.3",
     "pino": "9.5.0",
@@ -31,7 +31,6 @@
     "zod": "3.23.8"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "24.0.0",
     "@types/nodemailer": "^8.0.0",
     "@types/sanitize-html": "^2.16.1",

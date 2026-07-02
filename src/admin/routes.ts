@@ -94,6 +94,15 @@ const ALLOWED_UPLOAD_MIME: Record<string, string> = {
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
 
+function isDuplicateKeyError(err: unknown): boolean {
+  if (typeof err === 'object' && err !== null) {
+    const code = (err as { code?: string }).code;
+    if (code === 'ER_DUP_ENTRY') return true;
+  }
+
+  return String(err).includes('Duplicate entry');
+}
+
 /**
  * Admin API: session auth + post CRUD + media upload. Mounted under
  * `/api/admin`. Everything except `/login` requires a valid session cookie.
@@ -102,7 +111,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
   const { repo, auth, uploadDir, sessionTtlMs, cookieSecure } = deps;
 
   const requireAuth: MiddlewareHandler = async (c, next) => {
-    const username = auth.validate(getCookie(c, SESSION_COOKIE));
+    const username = await auth.validate(getCookie(c, SESSION_COOKIE));
     if (!username) {
       return c.json({ error: 'UNAUTHORIZED' }, 401);
     }
@@ -113,7 +122,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
   // Seeded credentials are placeholders: until they are replaced, the session
   // can only be used to change the password (and check /me / log out).
   const requireFreshPassword: MiddlewareHandler = async (c, next) => {
-    if (auth.mustChangePassword(c.get('username'))) {
+    if (await auth.mustChangePassword(c.get('username'))) {
       return c.json({ error: 'PASSWORD_CHANGE_REQUIRED' }, 403);
     }
     await next();
@@ -127,7 +136,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
       return c.json({ error: 'INVALID_BODY' }, 400);
     }
 
-    const result = auth.login(parsed.data.username, parsed.data.password);
+    const result = await auth.login(parsed.data.username, parsed.data.password);
     if (!result) {
       return c.json({ error: 'INVALID_CREDENTIALS' }, 401);
     }
@@ -146,16 +155,16 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     });
   });
 
-  app.post('/logout', (c: Context) => {
-    auth.logout(getCookie(c, SESSION_COOKIE));
+  app.post('/logout', async (c: Context) => {
+    await auth.logout(getCookie(c, SESSION_COOKIE));
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return c.json({ ok: true });
   });
 
-  app.get('/me', requireAuth, (c: Context) => {
+  app.get('/me', requireAuth, async (c: Context) => {
     return c.json({
       username: c.get('username'),
-      mustChangePassword: auth.mustChangePassword(c.get('username')),
+      mustChangePassword: await auth.mustChangePassword(c.get('username')),
     });
   });
 
@@ -164,7 +173,7 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     if (!parsed.success) {
       return c.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, 400);
     }
-    const ok = auth.changePassword(
+    const ok = await auth.changePassword(
       c.get('username'),
       parsed.data.currentPassword,
       parsed.data.newPassword,
@@ -254,13 +263,13 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
     return c.json({ html: renderPostHtml(markdown).html });
   });
 
-  app.get('/posts', requireAuth, requireFreshPassword, (c: Context) => {
-    return c.json({ posts: repo.listAll() });
+  app.get('/posts', requireAuth, requireFreshPassword, async (c: Context) => {
+    return c.json({ posts: await repo.listAll() });
   });
 
-  app.get('/posts/:id', requireAuth, requireFreshPassword, (c: Context) => {
+  app.get('/posts/:id', requireAuth, requireFreshPassword, async (c: Context) => {
     const id = Number(c.req.param('id'));
-    const post = repo.getById(id);
+    const post = await repo.getById(id);
     if (!post) return c.json({ error: 'POST_NOT_FOUND' }, 404);
     return c.json({ post });
   });
@@ -271,11 +280,11 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
       return c.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, 400);
     }
     try {
-      const id = repo.create(parsed.data);
+      const id = await repo.create(parsed.data);
       return c.json({ id }, 201);
     } catch (err) {
       // UNIQUE(slug, lang) violation
-      if (String(err).includes('UNIQUE')) {
+      if (isDuplicateKeyError(err)) {
         return c.json({ error: 'SLUG_LANG_EXISTS' }, 409);
       }
       throw err;
@@ -289,20 +298,20 @@ export function buildAdminRouter(deps: AdminDeps): Hono {
       return c.json({ error: 'INVALID_BODY', issues: parsed.error.issues }, 400);
     }
     try {
-      const ok = repo.updateById(id, parsed.data);
+      const ok = await repo.updateById(id, parsed.data);
       if (!ok) return c.json({ error: 'POST_NOT_FOUND' }, 404);
       return c.json({ ok: true });
     } catch (err) {
-      if (String(err).includes('UNIQUE')) {
+      if (isDuplicateKeyError(err)) {
         return c.json({ error: 'SLUG_LANG_EXISTS' }, 409);
       }
       throw err;
     }
   });
 
-  app.delete('/posts/:id', requireAuth, requireFreshPassword, (c: Context) => {
+  app.delete('/posts/:id', requireAuth, requireFreshPassword, async (c: Context) => {
     const id = Number(c.req.param('id'));
-    const ok = repo.removeById(id);
+    const ok = await repo.removeById(id);
     if (!ok) return c.json({ error: 'POST_NOT_FOUND' }, 404);
     return c.json({ ok: true });
   });

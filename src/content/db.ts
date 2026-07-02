@@ -1,163 +1,238 @@
-import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import Database from 'better-sqlite3';
+import { createPool, type Pool, type PoolOptions, type ResultSetHeader } from 'mysql2/promise';
 
-export type BlogDatabase = Database.Database;
-
-const POST_COLUMNS = [
-  ['translation_group_id', "TEXT NOT NULL DEFAULT ''"],
-  ['meta_title', 'TEXT'],
-  ['meta_description', 'TEXT'],
-  ['focus_keyword', 'TEXT'],
-  ['secondary_keywords', "TEXT NOT NULL DEFAULT '[]'"],
-  ['open_graph_image', 'TEXT'],
-  ['open_graph_title', 'TEXT'],
-  ['open_graph_description', 'TEXT'],
-  ['toc_json', "TEXT NOT NULL DEFAULT '[]'"],
-  ['json_ld', 'TEXT'],
-] as const;
-
-/**
- * Opens (and lazily creates) the blog content database at `dbPath`.
- *
- * In production this file lives on a persistent volume of the backend host;
- * locally it defaults to ./data/blog.db. The schema is created on first open
- * so a fresh host/volume bootstraps itself.
- */
-export function openBlogDb(dbPath: string): BlogDatabase {
-  const inMemory = dbPath === ':memory:';
-  let target = dbPath;
-
-  if (!inMemory) {
-    target = resolve(dbPath);
-    const dir = dirname(target);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-  }
-
-  const db = new Database(target);
-  if (!inMemory) db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS posts (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      slug            TEXT NOT NULL,
-      lang            TEXT NOT NULL CHECK (lang IN ('en', 'es')),
-      translation_key TEXT NOT NULL,
-      translation_group_id TEXT NOT NULL DEFAULT '',
-      title           TEXT NOT NULL,
-      description     TEXT NOT NULL DEFAULT '',
-      body_md         TEXT NOT NULL DEFAULT '',
-      body_html       TEXT NOT NULL DEFAULT '',
-      author          TEXT NOT NULL DEFAULT 'Taxalia',
-      hero_image      TEXT,
-      hero_alt        TEXT,
-      tags            TEXT NOT NULL DEFAULT '[]',
-      draft           INTEGER NOT NULL DEFAULT 0,
-      pub_date        TEXT NOT NULL,
-      updated_date    TEXT,
-      meta_title      TEXT,
-      meta_description TEXT,
-      focus_keyword   TEXT,
-      secondary_keywords TEXT NOT NULL DEFAULT '[]',
-      open_graph_image TEXT,
-      open_graph_title TEXT,
-      open_graph_description TEXT,
-      toc_json        TEXT NOT NULL DEFAULT '[]',
-      UNIQUE (slug, lang)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_posts_lang_pubdate
-      ON posts (lang, draft, pub_date DESC);
-
-    CREATE TABLE IF NOT EXISTS translation_groups (
-      id TEXT PRIMARY KEY,
-      published INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_translation_groups_published
-      ON translation_groups (published);
-
-    CREATE TABLE IF NOT EXISTS users (
-      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-      username             TEXT NOT NULL UNIQUE,
-      password_hash        TEXT NOT NULL,
-      salt                 TEXT NOT NULL,
-      must_change_password INTEGER NOT NULL DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      token      TEXT PRIMARY KEY,
-      user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-      expires_at INTEGER NOT NULL
-    );
-  `);
-
-  ensureBlogSchema(db);
-
-  return db;
+export interface MySqlBlogConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  connectionLimit: number;
+  ssl: boolean;
 }
 
-export function ensureBlogSchema(db: BlogDatabase): void {
-  for (const [column, definition] of POST_COLUMNS) {
-    const exists = db
-      .prepare(`PRAGMA table_info(posts)`)
-      .all()
-      .some((row) => (row as { name: string }).name === column);
+export type BlogDatabase = Pool;
 
-    if (!exists) {
-      db.exec(`ALTER TABLE posts ADD COLUMN ${column} ${definition}`);
-    }
+export interface MySqlEnvLike {
+  MYSQL_HOST: string;
+  MYSQL_PORT: number;
+  MYSQL_USER: string;
+  MYSQL_PASSWORD: string;
+  MYSQL_DATABASE: string;
+  MYSQL_CONNECTION_LIMIT: number;
+  MYSQL_SSL: boolean;
+}
+
+const POSTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS posts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    slug VARCHAR(191) NOT NULL,
+    lang VARCHAR(2) NOT NULL,
+    translation_key VARCHAR(191) NOT NULL,
+    translation_group_id VARCHAR(191) NOT NULL DEFAULT '',
+    title VARCHAR(255) NOT NULL,
+    description LONGTEXT NOT NULL,
+    body_md LONGTEXT NOT NULL,
+    body_html LONGTEXT NOT NULL,
+    author VARCHAR(255) NOT NULL,
+    hero_image LONGTEXT NULL,
+    hero_alt LONGTEXT NULL,
+    tags LONGTEXT NOT NULL,
+    draft TINYINT(1) NOT NULL DEFAULT 0,
+    pub_date VARCHAR(32) NOT NULL,
+    updated_date VARCHAR(32) NULL,
+    meta_title VARCHAR(255) NULL,
+    meta_description LONGTEXT NULL,
+    focus_keyword VARCHAR(255) NULL,
+    secondary_keywords LONGTEXT NOT NULL,
+    open_graph_image LONGTEXT NULL,
+    open_graph_title VARCHAR(255) NULL,
+    open_graph_description LONGTEXT NULL,
+    toc_json LONGTEXT NOT NULL,
+    json_ld LONGTEXT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_posts_slug_lang (slug, lang)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
+const TRANSLATION_GROUPS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS translation_groups (
+    id VARCHAR(191) NOT NULL,
+    published TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
+const USERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    username VARCHAR(191) NOT NULL,
+    password_hash LONGTEXT NOT NULL,
+    salt LONGTEXT NOT NULL,
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_users_username (username)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
+const SESSIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS sessions (
+    token VARCHAR(128) NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    expires_at BIGINT NOT NULL,
+    PRIMARY KEY (token),
+    KEY idx_sessions_user_id (user_id),
+    CONSTRAINT fk_sessions_user_id
+      FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`;
+
+const POST_ALTER_COLUMNS: Array<[string, string]> = [
+  ['translation_group_id', "VARCHAR(191) NOT NULL DEFAULT ''"],
+  ['meta_title', 'VARCHAR(255) NULL'],
+  ['meta_description', 'LONGTEXT NULL'],
+  ['focus_keyword', 'VARCHAR(255) NULL'],
+  ['secondary_keywords', 'LONGTEXT NOT NULL'],
+  ['open_graph_image', 'LONGTEXT NULL'],
+  ['open_graph_title', 'VARCHAR(255) NULL'],
+  ['open_graph_description', 'LONGTEXT NULL'],
+  ['toc_json', 'LONGTEXT NOT NULL'],
+  ['json_ld', 'LONGTEXT NULL'],
+] as const;
+
+export function mysqlConfigFromEnv(env: MySqlEnvLike): MySqlBlogConfig {
+  return {
+    host: env.MYSQL_HOST,
+    port: env.MYSQL_PORT,
+    user: env.MYSQL_USER,
+    password: env.MYSQL_PASSWORD,
+    database: env.MYSQL_DATABASE,
+    connectionLimit: env.MYSQL_CONNECTION_LIMIT,
+    ssl: env.MYSQL_SSL,
+  };
+}
+
+export async function openBlogDb(config: MySqlBlogConfig): Promise<BlogDatabase> {
+  if (!config.host.trim()) {
+    throw new Error('MYSQL_HOST is required');
+  }
+  if (!config.user.trim()) {
+    throw new Error('MYSQL_USER is required');
+  }
+  if (!config.database.trim()) {
+    throw new Error('MYSQL_DATABASE is required');
   }
 
-  // users may not exist yet (openBlogDb creates it after this runs on legacy
-  // fixtures); an empty PRAGMA result means there is nothing to migrate.
-  const userColumns = db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
-  if (
-    userColumns.length > 0 &&
-    !userColumns.some((row) => row.name === 'must_change_password')
-  ) {
-    db.exec(`ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0`);
+  const pool = createPool({
+    host: config.host,
+    port: config.port,
+    user: config.user,
+    password: config.password,
+    database: config.database,
+    connectionLimit: config.connectionLimit,
+    ssl: config.ssl ? {} : undefined,
+    waitForConnections: true,
+    namedPlaceholders: false,
+  } satisfies PoolOptions);
+
+  await ensureBlogSchema(pool);
+  return pool;
+}
+
+export async function ensureBlogSchema(db: BlogDatabase): Promise<void> {
+  await db.execute(POSTS_TABLE_SQL);
+  await db.execute(TRANSLATION_GROUPS_TABLE_SQL);
+  await db.execute(USERS_TABLE_SQL);
+  await db.execute(SESSIONS_TABLE_SQL);
+
+  for (const [column, definition] of POST_ALTER_COLUMNS) {
+    await ensureColumn(db, 'posts', column, definition);
   }
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS translation_groups (
-      id TEXT PRIMARY KEY,
-      published INTEGER NOT NULL DEFAULT 0
-    );
-  `);
+  await ensureColumn(db, 'users', 'must_change_password', 'TINYINT(1) NOT NULL DEFAULT 0');
 
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_posts_translation_group_id
-      ON posts (translation_group_id);
+  await ensureIndex(db, 'posts', 'idx_posts_lang_pubdate', '(lang, draft, pub_date DESC)');
+  await ensureIndex(db, 'posts', 'idx_posts_translation_group_id', '(translation_group_id)');
+  await ensureIndex(db, 'translation_groups', 'idx_translation_groups_published', '(published)');
 
-    CREATE INDEX IF NOT EXISTS idx_translation_groups_published
-      ON translation_groups (published);
-  `);
-
-  db.prepare(
+  await db.execute(
     `UPDATE posts
      SET translation_group_id = translation_key
      WHERE translation_group_id = '' OR translation_group_id IS NULL`,
-  ).run();
-
-  const groups = db
-    .prepare(
-      `SELECT translation_group_id AS id, MAX(draft) AS has_draft
-       FROM posts
-       WHERE translation_group_id IS NOT NULL AND translation_group_id != ''
-       GROUP BY translation_group_id`,
-    )
-    .all() as { id: string; has_draft: number }[];
-
-  const insertGroup = db.prepare(
-    `INSERT OR IGNORE INTO translation_groups (id, published)
-     VALUES (?, ?)`,
   );
 
-  for (const group of groups) {
-    insertGroup.run(group.id, group.has_draft === 0 ? 1 : 0);
+  const [groupRows] = (await db.query(
+    `SELECT translation_group_id AS id, MAX(draft) AS has_draft
+     FROM posts
+     WHERE translation_group_id IS NOT NULL AND translation_group_id != ''
+     GROUP BY translation_group_id`,
+  )) as [Array<{ id: string; has_draft: number }>, unknown];
+
+  for (const group of groupRows as Array<{ id: string; has_draft: number }>) {
+    await db.execute(
+      `INSERT INTO translation_groups (id, published)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE published = VALUES(published)`,
+      [group.id, group.has_draft === 0 ? 1 : 0],
+    );
   }
+}
+
+async function ensureColumn(
+  db: BlogDatabase,
+  table: string,
+  column: string,
+  definition: string,
+): Promise<void> {
+  const [rows] = (await db.query(
+    `SELECT 1
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [table, column],
+  )) as [Array<unknown>, unknown];
+
+  if (rows.length > 0) return;
+
+  await db.execute(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+}
+
+async function ensureIndex(
+  db: BlogDatabase,
+  table: string,
+  indexName: string,
+  definition: string,
+): Promise<void> {
+  const [rows] = (await db.query(
+    `SELECT 1
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND INDEX_NAME = ?
+     LIMIT 1`,
+    [table, indexName],
+  )) as [Array<unknown>, unknown];
+
+  if (rows.length > 0) return;
+
+  await db.execute(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` ${definition}`);
+}
+
+export async function closeBlogDb(db: BlogDatabase): Promise<void> {
+  await db.end();
+}
+
+export async function queryOne<T>(
+  db: BlogDatabase,
+  sql: string,
+  params: any[] = [],
+): Promise<T | null> {
+  const [rows] = (await db.query(sql, params)) as [Array<Record<string, unknown>>, unknown];
+  return (rows[0] ?? null) as T | null;
+}
+
+export async function execute(db: BlogDatabase, sql: string, params: any[] = []): Promise<ResultSetHeader> {
+  const [result] = await db.execute<ResultSetHeader>(sql, params);
+  return result;
 }

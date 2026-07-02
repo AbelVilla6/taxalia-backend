@@ -1,23 +1,38 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { openBlogDb } from '../../src/content/db.js';
+import { closeBlogDb, openBlogDb } from '../../src/content/db.js';
 import { PostRepository } from '../../src/content/repository.js';
 import { buildContentRouter } from '../../src/content/routes.js';
 import { seedIfEmpty } from '../../src/content/seed.js';
+import { describeMySql, mysqlConfig, resetBlogTables } from './mysql.js';
 
-function makeApp(): Hono {
-  const repo = new PostRepository(openBlogDb(':memory:'));
-  seedIfEmpty(repo);
-  const app = new Hono();
-  app.route('/api', buildContentRouter(repo));
-  return app;
-}
-
-describe('content API', () => {
+describeMySql('content API', () => {
+  let db: Awaited<ReturnType<typeof openBlogDb>> | undefined;
+  let repo: PostRepository;
   let app: Hono;
 
-  beforeEach(() => {
-    app = makeApp();
+  beforeEach(async () => {
+    db = await openBlogDb(mysqlConfig());
+    try {
+      await resetBlogTables(db);
+      repo = new PostRepository(db);
+      await seedIfEmpty(repo, true);
+      app = new Hono();
+      app.route('/api', buildContentRouter(repo));
+    } catch (error) {
+      await closeBlogDb(db);
+      throw error;
+    }
+  });
+
+  afterEach(async () => {
+    if (!db) return;
+    try {
+      await resetBlogTables(db);
+    } finally {
+      await closeBlogDb(db);
+      db = undefined;
+    }
   });
 
   it('lists published posts per language, newest first', async () => {
@@ -108,9 +123,7 @@ describe('content API', () => {
   });
 
   it('hides unpublished translation groups from public output', async () => {
-    const repo = new PostRepository(openBlogDb(':memory:'));
-    seedIfEmpty(repo);
-    repo.upsert({
+    await repo.upsert({
       slug: 'hidden-en',
       lang: 'en',
       translationGroupId: 'hidden-group',
@@ -132,7 +145,7 @@ describe('content API', () => {
       openGraphTitle: null,
       openGraphDescription: null,
     });
-    repo.upsert({
+    await repo.upsert({
       slug: 'hidden-es',
       lang: 'es',
       translationGroupId: 'hidden-group',
@@ -155,7 +168,7 @@ describe('content API', () => {
       openGraphDescription: null,
     });
 
-    repo.upsert({
+    await repo.upsert({
       slug: 'hidden-en',
       lang: 'en',
       translationGroupId: 'hidden-group',
@@ -190,14 +203,13 @@ describe('content API', () => {
   });
 
   it('exposes stored custom JSON-LD alongside the generated Article JSON-LD', async () => {
-    const repo = new PostRepository(openBlogDb(':memory:'));
     const faqJsonLd = JSON.stringify({
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
       inLanguage: 'es',
       mainEntity: [],
     });
-    repo.upsert({
+    await repo.upsert({
       slug: 'faq-es',
       lang: 'es',
       translationGroupId: 'faq-group',
